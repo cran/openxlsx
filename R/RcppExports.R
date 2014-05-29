@@ -41,8 +41,8 @@ getFunction <- function(x) {
     .Call('openxlsx_getFunction', PACKAGE = 'openxlsx', x)
 }
 
-getRefs <- function(x) {
-    .Call('openxlsx_getRefs', PACKAGE = 'openxlsx', x)
+getRefs <- function(x, startRow) {
+    .Call('openxlsx_getRefs', PACKAGE = 'openxlsx', x, startRow)
 }
 
 getRefsVals <- function(x, startRow) {
@@ -89,24 +89,24 @@ ExcelConvertExpand <- function(cols, LETTERS, rows) {
     .Call('openxlsx_ExcelConvertExpand', PACKAGE = 'openxlsx', cols, LETTERS, rows)
 }
 
-buildMatrix1 <- function(v, rowInd, colInd, colNames, nRows, nCols) {
-    .Call('openxlsx_buildMatrix1', PACKAGE = 'openxlsx', v, rowInd, colInd, colNames, nRows, nCols)
+buildMatrixNumeric <- function(v, rowInd, colInd, colNames, nRows, nCols) {
+    .Call('openxlsx_buildMatrixNumeric', PACKAGE = 'openxlsx', v, rowInd, colInd, colNames, nRows, nCols)
 }
 
-buildMatrix2 <- function(v, rowInd, colInd, colNames, nRows, nCols, charCols) {
-    .Call('openxlsx_buildMatrix2', PACKAGE = 'openxlsx', v, rowInd, colInd, colNames, nRows, nCols, charCols)
+buildMatrixMixed <- function(v, rowInd, colInd, colNames, nRows, nCols, charCols) {
+    .Call('openxlsx_buildMatrixMixed', PACKAGE = 'openxlsx', v, rowInd, colInd, colNames, nRows, nCols, charCols)
 }
 
-matrixInds <- function(indices) {
-    .Call('openxlsx_matrixInds', PACKAGE = 'openxlsx', indices)
+matrixRowInds <- function(indices) {
+    .Call('openxlsx_matrixRowInds', PACKAGE = 'openxlsx', indices)
 }
 
 buildCellMerges <- function(comps) {
     .Call('openxlsx_buildCellMerges', PACKAGE = 'openxlsx', comps)
 }
 
-readWorkbook <- function(v, vn, stringInds, r, tR, nRows, hasColNames) {
-    .Call('openxlsx_readWorkbook', PACKAGE = 'openxlsx', v, vn, stringInds, r, tR, nRows, hasColNames)
+readWorkbook <- function(v, vn, stringInds, r, tR, nRows, hasColNames, skipEmptyRows) {
+    .Call('openxlsx_readWorkbook', PACKAGE = 'openxlsx', v, vn, stringInds, r, tR, nRows, hasColNames, skipEmptyRows)
 }
 
 quickBuildCellXML <- function(prior, post, sheetData, rowNumbers, R_fileName) {
@@ -121,10 +121,6 @@ WhichMatch <- function(a, b) {
     .Call('openxlsx_WhichMatch', PACKAGE = 'openxlsx', a, b)
 }
 
-getCellsWithChildren <- function(xmlFile) {
-    .Call('openxlsx_getCellsWithChildren', PACKAGE = 'openxlsx', xmlFile)
-}
-
 buildTableXML <- function(id, ref, colNames, showColNames, tableStyle) {
     .Call('openxlsx_buildTableXML', PACKAGE = 'openxlsx', id, ref, colNames, showColNames, tableStyle)
 }
@@ -135,5 +131,25 @@ uniqueCellAppend <- function(sheetData, r, newCells) {
 
 writeCellStyles <- function(sheetData, rows, cols, styleId, LETTERS) {
     .Call('openxlsx_writeCellStyles', PACKAGE = 'openxlsx', sheetData, rows, cols, styleId, LETTERS)
+}
+
+calcNRows <- function(x, skipEmptyRows) {
+    .Call('openxlsx_calcNRows', PACKAGE = 'openxlsx', x, skipEmptyRows)
+}
+
+buildCellTypes <- function(classes, nRows) {
+    .Call('openxlsx_buildCellTypes', PACKAGE = 'openxlsx', classes, nRows)
+}
+
+removeEmptyNodes <- function(x, emptyNodes) {
+    .Call('openxlsx_removeEmptyNodes', PACKAGE = 'openxlsx', x, emptyNodes)
+}
+
+getCellsWithChildren <- function(xmlFile, emptyNodes) {
+    .Call('openxlsx_getCellsWithChildren', PACKAGE = 'openxlsx', xmlFile, emptyNodes)
+}
+
+getHyperlinkRefs <- function(x) {
+    .Call('openxlsx_getHyperlinkRefs', PACKAGE = 'openxlsx', x)
 }
 

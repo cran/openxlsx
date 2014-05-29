@@ -1,11 +1,6 @@
 
 \documentclass[11pt]{article}
 \usepackage{graphicx, verbatim}
-\setlength{\textwidth}{7in} 
-\setlength{\textheight}{9in}
-\setlength{\oddsidemargin}{0in} 
-\setlength{\evensidemargin}{0in}
-\setlength{\topmargin}{-1.5cm}
 
 % \VignetteIndexEntry{Read, write and edit xlsx files}
 % \VignetteDepends{openxlsx}
@@ -13,6 +8,15 @@
 % \VignetteKeyword{xlsx}
 % \VignetteKeyword{spreadsheet}
 
+\usepackage{geometry}
+ \geometry{
+ a4paper,
+ total={210mm,297mm},
+ left=15mm,
+ right=15mm,
+ top=20mm,
+ bottom=20mm,
+ }
 
 \begin{document}
 \SweaveOpts{concordance=TRUE}
@@ -25,18 +29,30 @@
 
 \section{Installation}
 \noindent
-The openxlsx package requires an external zip application.  \\
+The openxlsx package requires a zip application to be available to R, such as the one that comes with Rtools.  \\
 
 \noindent
 If the command
 \begin{verbatim}
-Sys.getenv("R_ZIPCMD", "zip")
+ shell("zip") 
 \end{verbatim}
-returns empty, install Rtools from: http://cran.r-project.org/bin/windows/Rtools/
+returns "zip is not recognised..." install Rtools from: http://cran.r-project.org/bin/windows/Rtools/ 
+and add the R tools bin directory (defaults to c:\textbackslash Rtools\textbackslash bin on windows) to the system path.\\
+    
+\noindent
+If the command returns
+\begin{verbatim}
+ Warning message: running command '"zip" -r1 ... had status 127
+\end{verbatim}
+it is most likely because R cannot find a zip application.  First check if the Rtools/bin directory is in the 
+system PATH variable.  This can be checked from within R using the command
+\begin{verbatim}
+ shell("PATH")
+\end{verbatim}
+The output should contain a path to Rtools/bin somewhere in the string.
+
 
     
-    
-
 \newpage
 \section{Examples}
 
@@ -44,48 +60,50 @@ returns empty, install Rtools from: http://cran.r-project.org/bin/windows/Rtools
 
 
 \begin{verbatim}
-require(openxlsx)
 require(ggplot2)
 
+## set default border Colour and style
 wb <- createWorkbook()
-addWorksheet(wb, sheetName = "Motor Trend Car Road Tests", showGridLines = FALSE))
-addWorksheet(wb, sheetName = "Iris")
-addWorksheet(wb, sheetName = "Conditional Formatting")
+options("openxlsx.borderColour" = "#4F80BD")
+options("openxlsx.borderStyle" = "thin")
+modifyBaseFont(wb, fontSize = 10, fontName = "Arial Narrow")
+
+addWorksheet(wb, sheetName = "Motor Trend Car Road Tests", gridLines = FALSE)
+addWorksheet(wb, sheetName = "Iris", gridLines = FALSE)
 
 ## sheet 1
+freezePane(wb, sheet = 1, firstRow = TRUE, firstCol = TRUE) ## freeze first row and column
 writeDataTable(wb, sheet = 1, x = mtcars,
                colNames = TRUE, rowNames = TRUE,
-               tableStyle = "TableStyleMedium9")
+               tableStyle = "TableStyleLight9")
 
 setColWidths(wb, sheet = 1, cols = "A", widths = 18)
 
 ## write iris data.frame as excel table
-writeDataTable(wb, 2, iris, startCol = "L", startRow = 2)
+writeDataTable(wb, sheet = 2, iris, startCol = "K", startRow = 2)
 
 qplot(data=iris, x = Sepal.Length, y= Sepal.Width, colour = Species)
-insertPlot(wb, 2, xy=c("B", 16)) ## insert plot
+insertPlot(wb, 2, xy=c("B", 16)) ## insert plot at cell B16
 
 means <- aggregate(x = iris[,-5], by = list(iris$Species), FUN = mean)
 vars <- aggregate(x = iris[,-5], by = list(iris$Species), FUN = var)
 
-writeData(wb, 2, means, startCol = "B", startRow=3, borders="rows", borderColour=NULL,
-          headerStyle = createStyle(border="TopBottom", fgFill="#FFC7CE", halign="center"))
+## write group means
+headSty <- createStyle(fgFill="#DCE6F1", halign="center", border = "TopBottomLeftRight")
+writeData(wb, 2, x = "Iris dataset group means", startCol = 2, startRow = 2)
+writeData(wb, 2, x = means, startCol = "B", startRow=3, borders="rows", headerStyle = headSty)
 
-writeData(wb, 2, vars, startCol = "B", startRow=10, borders="columns", borderColour=NULL,
-          headerStyle = createStyle(border="TopBottom", fgFill="#FFC7CE", halign="center"))
+## write group variances
+writeData(wb, 2, x = "Iris dataset group variances", startCol = 2, startRow = 9)
+writeData(wb, 2, x= vars, startCol = "B", startRow=10, borders="columns",
+  headerStyle = headSty)
 
-setColWidths(wb, 2, cols=2:6, widths = 12) ## width is recycled
+setColWidths(wb, 2, cols=2:6, widths = 12) ## width is recycled for each col
+setColWidths(wb, 2, cols=11:15, widths = 15)
 
-## write data with no styling
-writeData(wb, 3, x=matrix(rnorm(200000), ncol = 40), startRow=5)
-
-## conditional formating with default style
-conditionalFormat(wb, 3, cols=1:50, rows = 4+1:5000, rule="< 0")
-
-## write text to cell B2 and style 
-titleStyle <- createStyle(fontSize = 24)
-writeData(wb, 3, "Normal Numbers", xy = c("B",2))
-addStyle(wb, 3, cols = 2, rows=2, style= titleStyle)
+# style mean & variance table headers
+s1 <- createStyle(fontSize=14, textDecoration=c("bold", "italic"))
+addStyle(wb, 2, style = s1, rows=c(2,9), cols=c(2,2))
 
 saveWorkbook(wb, "basics.xlsx", overwrite = TRUE) ## save to working directory
 \end{verbatim}
@@ -94,7 +112,7 @@ saveWorkbook(wb, "basics.xlsx", overwrite = TRUE) ## save to working directory
 \subsection{Stock Price}
 
 \begin{verbatim}
-require(openxlsx); require(ggplot2)
+require(ggplot2)
 
 wb <- createWorkbook()
 
@@ -122,6 +140,9 @@ insertPlot(wb, sheet = 1, xy = c("J", 3))
 ggplot(data = prices, aes(x = logReturns)) + geom_bar(binwidth=0.0025) +
   labs(title = "Histogram of log returns")
 
+## currency 
+class(prices$Close) <- "currency" ## styles as currency in workbook
+
 ## write historical data and  histogram of returns
 writeDataTable(wb, sheet = "CBA", x = prices)
 insertPlot(wb, sheet = 1, startRow=25, startCol = "J")
@@ -132,10 +153,10 @@ conditionalFormat(wb, sheet = 1, cols = ncol(prices), rows = 2:(nrow(prices)+1),
 
 ## style log return col as a percentage  
 logRetStyle <- createStyle(numFmt = "percentage")
-  
+
 addStyle(wb, 1, style = logRetStyle, rows = 2:(nrow(prices)+1), 
          cols = "H", gridExpand = TRUE)
-         
+
 setColWidths(wb, sheet=1, cols = c("A", "F", "G", "H"), widths = 15)
 
 ## save workbook to working directory

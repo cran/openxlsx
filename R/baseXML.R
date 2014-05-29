@@ -61,6 +61,8 @@ genBaseWorkbook <- function(){
 
 genBaseSheet <- function(sheetName, showGridLines = TRUE, tabSelected = FALSE){
   
+  
+  
   ## list of all possible children
   tmp <- list(list(dimension = '<dimension ref="A1"/>',
        sheetViews = sprintf('<sheetViews><sheetView workbookViewId="0" showGridLines="%s" tabSelected="TRUE"/></sheetViews>', as.numeric(showGridLines)),
@@ -70,6 +72,7 @@ genBaseSheet <- function(sheetName, showGridLines = TRUE, tabSelected = FALSE){
        autoFilter = NULL,
        mergeCells = NULL,
        conditionalFormatting = NULL,
+       hyperlinks = NULL,
        pageMargins = '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>',
        pageSetup = '<pageSetup paperSize="9" orientation="portrait" horizontalDpi="300" verticalDpi="300" r:id="rId2"/>',  ## will always be 2
        headerFooter = NULL,
@@ -98,7 +101,7 @@ genBaseStyleSheet <- function(){
     
        numFmts = NULL,
        
-       fonts = c('<font><sz val="11"/><color indexed="8"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font>'),
+       fonts = c('<font><sz val="11"/><color rgb="%s"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font>'),
        
        fills = c('<fill><patternFill patternType="none"/></fill>',
                     '<fill><patternFill patternType="gray125"/></fill>'),

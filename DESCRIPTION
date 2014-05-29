@@ -1,9 +1,14 @@
 Package: openxlsx
 Type: Package
 Title: .xlsx reading, writing and editing.
-Version: 1.0.3
-Date: 2014-02-06
-Author: Alexander Walker
+Version: 2.0.1
+Date: 2014-05-29
+Authors@R: c(
+    person("Alexander", "Walker",
+    email = "Alexander.Walker1989@gmail.com", role = c("aut", "cre")),
+    person("Luca", "Braglia", role = "ctb"))
+URL: https://github.com/awalker89/openxlsx
+BugReports: https://github.com/awalker89/openxlsx/issues
 Maintainer: Alexander Walker <Alexander.Walker1989@gmail.com>
 Description: This package simplifies the creation of .xlsx files by providing a
     high level interface to writing, styling and editing worksheets. Through
@@ -11,8 +16,10 @@ Description: This package simplifies the creation of .xlsx files by providing a
     packages with the added benefit of removing the dependency on Java.
 License: GPL-3
 LinkingTo: Rcpp
-Imports: methods, Rcpp
-Packaged: 2014-04-21 06:12:25 UTC; Alex
-NeedsCompilation: yes
+Imports: methods, Rcpp (>= 0.11.1)
 Repository: CRAN
-Date/Publication: 2014-04-21 15:40:58
+Packaged: 2014-05-29 10:38:15 UTC; Alex
+Author: Alexander Walker [aut, cre],
+  Luca Braglia [ctb]
+NeedsCompilation: yes
+Date/Publication: 2014-05-29 15:05:07

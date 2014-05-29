@@ -15,7 +15,7 @@
 #' @import methods
 #' @examples
 #' ## Create a new workbook
-#' wb <- createWorkbook("Alex")
+#' wb <- createWorkbook()
 #' 
 #' ## Save workbook to working directory
 #' saveWorkbook(wb, file = "createWorkbookExample.xlsx", overwrite = TRUE)
@@ -27,10 +27,9 @@ createWorkbook <- function(creator = Sys.getenv("USERNAME")){
   if(length(creator) > 1)
     creator <- creator[[1]]
   
-  zip <- Sys.getenv("R_ZIPCMD", "zip")
-  if(nchar(zip[[1]]) == 0)
-    stop("No zip application found. Please install Rtools.")  
-  
+  ## remove any illegal XML characters
+  creator <- replaceIllegalCharacters(creator)
+    
   invisible(Workbook$new(creator))
 }
 
@@ -68,21 +67,16 @@ saveWorkbook <- function(wb, file, overwrite = FALSE){
   if(!is.logical(overwrite))
     overwrite = FALSE
   
-  file <- gsub("\\\\", "\\/", file)
-  slashPos <- unlist(gregexpr("\\/", file))
-  
-  if(grepl("\\/", file)){
-    path <- substr(file, 1, tail(slashPos,1))
-    fileName <- substring(file, tail(slashPos,1)+1)
-  }else{
-    path <- getwd()
-    fileName <- file
-  }
-  
-  if(file.exists(file.path(path, fileName)) & !overwrite)
+  if(file.exists(file) & !overwrite)
     stop("File already exists!")
   
-  wb$saveWorkbook(path = path, fileName = fileName, overwrite = overwrite)
+  tmpDir <- wb$saveWorkbook(quiet = TRUE)
+  setwd(wd)
+  
+  file.copy(file.path(tmpDir, "temp.xlsx"), file, overwrite = overwrite)
+
+  ## delete temporary dir
+  unlink(tmpDir, force = TRUE, recursive= TRUE)
   
   invisible(1)
 }
@@ -184,7 +178,11 @@ sheets <- function(wb){
   if(!"Workbook" %in% class(wb))
     stop("First argument must be a Workbook.")
  
- return(names(wb$worksheets))
+  
+  nms <- names(wb$worksheets)
+  nms <- replaceXMLEntities(nms)
+  
+ return(nms)
 }
 
 
@@ -194,9 +192,7 @@ sheets <- function(wb){
 #' @author Alexander Walker
 #' @param wb A Workbook object to attach the new worksheet
 #' @param sheetName A name for the new worksheet
-#' @param gridLines A logical. If TRUE, the worksheet grid lines will be
-#' shows, else they will be hidden.
-#' or hidden.
+#' @param gridLines A logical. If FALSE, the worksheet grid lines will be hidden.
 #' @return XML tree
 #' @export
 #' @examples
@@ -224,12 +220,10 @@ addWorksheet <- function(wb, sheetName, gridLines = TRUE){
   if(nchar(sheetName) > 29)
     stop("sheetName too long! Max length is 28 characters.")
   
+  nSheets <- length(wb$worksheets)
+  
   ## Invalid XML characters
-  sheetName <- gsub('"', "&quot;", sheetName)
-  sheetName <- gsub('&', "&amp;", sheetName)
-  sheetName <- gsub("'", "&apos;", sheetName)
-  sheetName <- gsub('<', "&lt;", sheetName)
-  sheetName <- gsub('>', "&gt;", sheetName)
+  sheetName <- replaceIllegalCharacters(sheetName)
   
   invisible(wb$addWorksheet(sheetName, gridLines))
 } 
@@ -304,9 +298,13 @@ convertFromExcelRef <- function(col){
 #' @description Create a new style to apply to worksheet cells
 #' @author Alexander Walker
 #' @seealso \code{\link{addStyle}}
-#' @param fontName A name of a font. Note the font name is not validated.
-#' @param fontColour Colour of text in cell.  A valid hex colour beginning with "#"  
+#' @param fontName A name of a font. Note the font name is not validated. If fontName is NULL,
+#' the workbook base font is used. (Defaults to Calibri)
+#' @param fontColour Colour of text in cell.  A valid hex colour beginning with "#"
+#' or one of colours(). If fontColour is NULL, the workbook base font colours is used.
+#' (Defaults to black)
 #' @param fontSize Font size. A numeric greater than 0.
+#' If fontSize is NULL, the workbook base font size is used. (Defaults to 11)
 #' @param numFmt Cell formatting
 #' \itemize{
 #'   \item{\bold{GENERAL}}
@@ -314,6 +312,7 @@ convertFromExcelRef <- function(col){
 #'   \item{\bold{CURRENCY}}
 #'   \item{\bold{ACCOUNTING}}
 #'   \item{\bold{DATE}}
+#'   \item{\bold{LONGDATE}}
 #'   \item{\bold{TIME}}
 #'   \item{\bold{PERCENTAGE}}
 #'   \item{\bold{FRACTION}}
@@ -333,10 +332,31 @@ convertFromExcelRef <- function(col){
 #'    \item{\bold{TopBottomLeftRight}}{ All borders}
 #'   }
 #'   
-#' @param borderColour Border colour.  A valid hex colour beginning with "#"   
-#' @param bgFill Cell background fill colour. A valid hex colour beginning with "#"  
-#' @param fgFill Cell foreground fill colour. A valid hex colour beginning with "#"  
-
+#' @param borderColour  Colour of cell border.  
+#' A valid colour (belonging to colours()) or a valid hex colour beginning with "#"  
+#' 
+#' @param borderStyle Border line style
+#' \itemize{
+#'    \item{\bold{none}}{ No Border}
+#'    \item{\bold{thin}}{ thin border}
+#'    \item{\bold{medium}}{ medium border}
+#'    \item{\bold{dashed}}{ dashed border}
+#'    \item{\bold{dotted}}{ dotted border}
+#'    \item{\bold{thick}}{ thick border}
+#'    \item{\bold{double}}{ double line border}
+#'    \item{\bold{hair}}{ Hairline border}
+#'    \item{\bold{mediumDashed}}{ medium weight dashed border}
+#'    \item{\bold{dashDot}}{ dash-dot border}
+#'    \item{\bold{mediumDashDot}}{ medium weight dash-dot border}
+#'    \item{\bold{dashDotDot}}{ dash-dot-dot border}
+#'    \item{\bold{mediumDashDotDot}}{ medium weight dash-dot-dot border}
+#'    \item{\bold{slantDashDot}}{ slanted dash-dot border}
+#'   }
+#'    
+#' @param bgFill Cell background fill colour. 
+#' A valid colour (belonging to colours()) or a valid hex colour beginning with "#"   
+#' @param fgFill Cell foreground fill colour.
+#' A valid colour (belonging to colours()) or a valid hex colour beginning with "#"   
 #'   
 #' @param halign
 #' Horizontal alignment of cell contents
@@ -369,6 +389,10 @@ convertFromExcelRef <- function(col){
 #' @export
 #' @examples
 #' 
+#' ## Modify default values of border colour and border line style
+#' options("openxlsx.borderColour" = "#4F80BD")
+#' options("openxlsx.borderStyle" = "thin")
+#' 
 #' ## Size 18 Arial, Bold, left horz. aligned, fill colour #1A33CC, all borders,
 #' style <- createStyle(fontSize = 18, fontName = "Arial",
 #'   textDecoration = "bold", halign = "left", fgFill = "#1A33CC", border= "TopBottomLeftRight")
@@ -381,33 +405,46 @@ convertFromExcelRef <- function(col){
 #' # borderColour is recycled for each border or all colours can be supplied
 #' 
 #' # colour is recycled 3 times for "Top", "Bottom" & "Right" sides.
-#' createStyle(border = "TopBottomRight", borderColour = "#FF0000") 
+#' createStyle(border = "TopBottomRight", borderColour = "red") 
 #' 
 #' # supply all colours
-#' createStyle(border = "TopBottomLeft", borderColour = c("#FF0000","#00FF00", "#0000FF"))
-#' 
-createStyle <- function(fontName = "Calibri", fontSize = 11, fontColour = "#000000",
+#' createStyle(border = "TopBottomLeft", borderColour = c("red","yellow", "green"))
+createStyle <- function(fontName = NULL,
+                        fontSize = NULL,
+                        fontColour = NULL,
                         numFmt = "GENERAL",
-                        border = NULL, borderColour = "#000000",
+                        border = NULL,
+                        borderColour = getOption("openxlsx.borderColour", "black"),
+                        borderStyle =  getOption("openxlsx.borderStyle", "thin"),
                         bgFill = NULL, fgFill = NULL,
                         halign = NULL, valign = NULL, 
                         textDecoration = NULL, wrapText = FALSE){
   
   ### Error checking
-  validNumFmt <- c("GENERAL", "NUMBER", "CURRENCY", "ACCOUNT", "DATE", "TIME", "PERCENTAGE", "SCIENTIFIC", "TEXT")
+  validNumFmt <- c("GENERAL", "NUMBER", "CURRENCY", "ACCOUNTING", "DATE", "LONGDATE", "TIME", "PERCENTAGE", "SCIENTIFIC", "TEXT", "3", "4")
   numFmt <- toupper(numFmt)
   if(!numFmt %in% validNumFmt)
     stop("Invalid numFmt")
      
-  numFmtMapping <- list(list("numFmtId" = 0),
-                        list("numFmtId" = 2),
-                        list("numFmtId" = 164, formatCode = "&quot;$&quot;#,##0.00"),
-                        list("numFmtId" = 44),
-                        list("numFmtId" = 14),
-                        list("numFmtId" = 167),
-                        list("numFmtId" = 10),
-                        list("numFmtId" = 11),
-                        list("numFmtId" = 49))
+  numFmtMapping <- list(list("numFmtId" = 0),  # GENERAL
+                        list("numFmtId" = 2),  # NUMBER
+                        list("numFmtId" = 164, formatCode = "&quot;$&quot;#,##0.00"), ## CURRENCY
+                        list("numFmtId" = 44), # ACCOUNTING
+                        list("numFmtId" = 14), # DATE
+                        list("numFmtId" = 166, formatCode = "[$-F800]dddd\\,\\ mmmm\\ dd\\,\\ yyyy"), #LONGDATE
+                        list("numFmtId" = 167), # TIME
+                        list("numFmtId" = 10),  # PERCENTAGE
+                        list("numFmtId" = 11),  # SCIENTIFIC
+                        list("numFmtId" = 49),
+                        
+                        list("numFmtId" = 3),
+                        list("numFmtId" = 4))
+  
+  ## Validate border line style
+  if(!is.null(borderStyle))
+    borderStyle <- validateBorderStyle(borderStyle)
+  
+
   
   if(!is.null(halign)){
     halign <- tolower(halign[[1]])
@@ -430,55 +467,42 @@ createStyle <- function(fontName = "Calibri", fontSize = 11, fontColour = "#0000
        stop("Invalid textDecoration!")
   }
   
+  borderColour <- validateColour(borderColour)
   
-  if(!is.null(bgFill)){
-    bgFill <- toupper(bgFill)
-    if(!grepl("#[0-9A-F]{6}", bgFill))
-      stop("Invalid hex code for bgFill")
-  }
+  if(!is.null(fontColour))
+    fontColour <- validateColour(fontColour)
   
-  if(!is.null(fgFill)){
-    fgFill <- toupper(fgFill)
-    if(!grepl("#[0-9A-F]{6}", fgFill))
-      stop("Invalid hex code for fgFill")
-  }
+  if(!is.null(fontSize))
+    if(fontSize < 1) stop("Font size must be greater than 0!")
   
-  fontColour <- toupper(fontColour)
-  borderColour <- toupper(borderColour)
-  if(length(fontName) == 0) stop("Invalid font name!")
-  if(fontSize < 1) stop("Font size must be greater than 0!")
-  if(!grepl("#[A-F0-9]{6}", fontColour)) stop("Invalid fontColour!")
-  if(!all(grepl("#[A-F0-9]{6}", borderColour))) stop("Invalid borderColour!")
-  
+
   
   ######################### error checking complete #############################
   style <- Style$new()
   
   style$fontName <- list(val = fontName)
   style$fontSize <- list(val = fontSize)
-  style$fontColour <- list(rgb =  gsub("#", "FF", fontColour))
+  if(!is.null(fontColour))
+    style$fontColour <- list(rgb =  gsub("#", "FF", fontColour))
     
   style$fontDecoration <- toupper(textDecoration)
+
+  ## background fill   
+  if(is.null(bgFill)){
+    bgFillList <- NULL
+  }else{
+    bgFill <- validateColour(bgFill)
+    style$fill <- append(style$fill, list(fillBg = list(rgb = gsub("#", "FF", bgFill))))
+  }
   
-    
-   ## fill    
-   if(is.null(bgFill)){
-     bgFillList <- NULL
-   }else if(grepl("#[A-F0-9]{6}", bgFill)){
-     bgFillList <- list(rgb = gsub("#", "FF", bgFill))
-   }else{
-     bgFillList <- bgFill
-   }
-    
-   style$fill <- list(fillBg = bgFillList)
-   if(is.null(fgFill)){
+  ## foreground fill
+  if(is.null(fgFill)){
      fgFillList <- NULL
-   }else if(grepl("#[A-F0-9]{6}", fgFill)){
-     style$fill <- append(style$fill, list(fillFg = list(rgb = gsub("#", "FF", fgFill))))
    }else{
-     
-     style$fill <- append(style$fill, list(fillFg = fgFill))
+     fgFill <- validateColour(fgFill)
+     style$fill <- append(style$fill, list(fillFg = list(rgb = gsub("#", "FF", fgFill))))
    }
+  
   
   ## border
   if(!is.null(border)){
@@ -492,6 +516,7 @@ createStyle <- function(fontName = "Calibri", fontSize = 11, fontColour = "#0000
     
     borderColour <- gsub("#", "FF", borderColour)
     borderColour <- rep(borderColour, length.out = nSides)
+    borderStyle <-  rep(borderStyle, length.out = nSides)
     
     pos <- pos[pos > 0]
     
@@ -499,24 +524,25 @@ createStyle <- function(fontName = "Calibri", fontSize = 11, fontColour = "#0000
       stop("Unknown border argument")
     
     names(borderColour) <- names(pos)
-         
+    names(borderStyle) <- names(pos)
+    
     if("LEFT" %in% names(pos)){
-      style$borderLeft <- "thin"
+      style$borderLeft <- borderStyle[["LEFT"]]
       style$borderLeftColour <- list(rgb = borderColour[["LEFT"]])
     }
     
     if("RIGHT" %in% names(pos)){
-      style$borderRight <- "thin"
+      style$borderRight <-  borderStyle[["RIGHT"]]
       style$borderRightColour <- list(rgb = borderColour[["RIGHT"]])
     }
     
     if("TOP" %in% names(pos)){
-      style$borderTop <- "thin"
+      style$borderTop <-  borderStyle[["TOP"]]
       style$borderTopColour <- list(rgb = borderColour[["TOP"]])
     }
     
     if("BOTTOM" %in% names(pos)){
-      style$borderBottom <- "thin"
+      style$borderBottom <-  borderStyle[["BOTTOM"]]
       style$borderBottomColour <- list(rgb = borderColour[["BOTTOM"]])
     }
 
@@ -555,7 +581,6 @@ createStyle <- function(fontName = "Calibri", fontSize = 11, fontColour = "#0000
 #' 
 #' ## Add a worksheets
 #' addWorksheet(wb, "Expenditure", gridLines = FALSE) 
-#' addWorksheet(wb, "A Sheet to style") 
 #' 
 #' ##write data to worksheet 1
 #' writeData(wb, sheet = 1, USPersonalExpenditure, rowNames = TRUE)
@@ -578,6 +603,9 @@ addStyle <- function(wb, sheet, style, rows, cols, gridExpand = FALSE){
   
   if(!"Workbook" %in% class(wb))
     stop("First argument must be a Workbook.")
+  
+  if(!"Style" %in% class(style))
+    stop("style argument must be a Style object.")
   
   cols <- convertFromExcelRef(cols)
   rows <- as.numeric(rows)
@@ -1058,13 +1086,13 @@ orderCellRef <- function(x){
 #' wb <- createWorkbook()
 #' 
 #' ## Add a worksheet
-#' addWorksheet(wb, "Sheet 1") 
+#' addWorksheet(wb, "Sheet 1", gridLines = FALSE) 
 #'
-#' ## create a plots
+#' ## create plot objects
 #' require(ggplot2)
-#' p1 <- ggplot2::qplot(mpg, data=mtcars, geom="density",
+#' p1 <- qplot(mpg, data=mtcars, geom="density",
 #'   fill=as.factor(gear), alpha=I(.5), main="Distribution of Gas Milage")
-#' p2 <- ggplot2::qplot(age, circumference,
+#' p2 <- qplot(age, circumference,
 #'   data = Orange, geom = c("point", "line"), colour = Tree)
 #' 
 #' ## Insert currently displayed plot to sheet 1, row 1, column 1
@@ -1232,7 +1260,7 @@ removeWorksheet <- function(wb, sheet){
 #' @export
 #' @examples
 #' ## load a workbook 
-#' wb <- createWorkbook("Alex")
+#' wb <- createWorkbook()
 #' addWorksheet(wb, "Worksheet 1")
 #' x <- data.frame(matrix(runif(200), ncol = 10)) 
 #' names(x) <- paste("Variable", 1:10)
@@ -1301,15 +1329,39 @@ modifyBaseFont <- function(wb, fontSize = 11, fontColour = "#000000", fontName =
   
   
   if(fontSize < 0) stop("Invalid fontSize")
-  if(!grepl("#[0-9A-F]{6}", fontColour)) stop("Invalid hex code for fontColour")
+  fontColour <- gsub("#", "FF", validateColour(fontColour))
   
-  fontColour <- gsub("#", "FF", toupper(fontColour))
       
-  wb$styles$fonts[[1]] <- sprintf('<font><sz val="%s"/><color rgb="%s"/><name val="%s"/><family val="2"/></font>', fontSize, fontColour, fontName)
+  wb$styles$fonts[[1]] <- sprintf('<font><sz val="%s"/><color rgb="%s"/><name val="%s"/></font>', fontSize, fontColour, fontName)
   
 }
 
 
+#' @name getBaseFont
+#' @title Return the workbook defaul font
+#' @author Alexander Walker
+#' @param wb A workbook object
+#' @description Returns the base font used in the workbook.
+#' @export
+#' @examples
+#' ## create a workbook
+#' wb <- createWorkbook()
+#' getBaseFont(wb)
+#' 
+#' ## modify base font to size 10 Arial Narrow in red
+#' modifyBaseFont(wb, fontSize = 10, fontColour = "#FF0000", fontName = "Arial Narrow")
+#' 
+#' getBaseFont(wb)
+getBaseFont <- function(wb){
+  
+
+  if(!"Workbook" %in% class(wb))
+    stop("First argument must be a Workbook.")
+
+  wb$getBaseFont()
+  
+}
+  
 
 #' @name setHeader
 #' @title Set header for all worksheets
@@ -1483,4 +1535,120 @@ showGridLines <- function(wb, sheet, showGridLines = FALSE){
   wb$worksheets[[sheet]]$sheetViews <- sv
   
 }
+
+
+
+
+
+#' @name worksheetOrder
+#' @title Order of worksheets in xlsx file
+#' @details This function does not reorder the worksheets within the workbook object, it simply
+#' shuffles the order when writing to file.
+#' @export
+#' @examples
+#' ## setup a workbook with 3 worksheets
+#' wb <- createWorkbook()
+#' addWorksheet(wb = wb, sheetName = "Sheet 1", gridLines = FALSE)
+#' writeDataTable(wb = wb, sheet = 1, x = iris)
+#' 
+#' addWorksheet(wb = wb, sheetName = "mtcars (Sheet 2)", gridLines = FALSE)
+#' writeData(wb = wb, sheet = 2, x = mtcars)
+#' 
+#' addWorksheet(wb = wb, sheetName = "Sheet 3", gridLines = FALSE)
+#' writeData(wb = wb, sheet = 3, x = Formaldehyde)
+#' 
+#' worksheetOrder(wb)
+#' sheets(wb)
+#' worksheetOrder(wb) <- c(1,3,2) # switch position of sheets 2 & 3 
+#' writeData(wb, 2, 'This is still the "mtcars" worksheet', startCol = 15)
+#' worksheetOrder(wb)
+#' sheets(wb)  ## ordering within workbook is not changed
+#' 
+#' saveWorkbook(wb, "worksheetOrderExample.xlsx",  overwrite = TRUE)
+#' worksheetOrder(wb) <- c(3,2,1)
+#' saveWorkbook(wb, "worksheetOrderExample2.xlsx",  overwrite = TRUE)
+worksheetOrder <- function(wb){
+  
+  if(!"Workbook" %in% class(wb))
+    stop("Argument must be a Workbook.")
+  
+#   nms <- names(wb$worksheets)
+#   nms <- replaceXMLEntities(nms)
+#   sprintf('%s: "%s"', wb$sheetOrder, nms[wb$sheetOrder])
+
+  wb$sheetOrder
+  
+}
+
+#' @rdname worksheetOrder
+#' @param wb A workbook object
+#' @param value Vector specifying order to write worksheets to file
+#' @export
+`worksheetOrder<-` <- function(wb, value) {
+  
+  if(!"Workbook" %in% class(wb))
+    stop("Argument must be a Workbook.")
+  
+  value <- unique(value)
+  if(length(value) != length(wb$worksheets))
+    stop(sprintf("Worksheet order must be same length as number of worksheets [%s]", length(wb$worksheets)))
+  
+  if(any(value > length(wb$worksheets)))
+    stop("Elements of order are greater than the number of worksheets")
+  
+  wb$sheetOrder <- value
+  
+  invisible(wb)
+  
+}
+
+
+
+
+#' @name convertToDate
+#' @title Convert from excel date number to R Date type
+#' @param x A vector of integers
+#' @param origin date. Default value is for Windows Excel 2010
+#' @details Excel stores dates as number of days from some origin day
+#' (this origin is "1970-1-1" for Excel 2010).
+#' @export
+#' @examples
+#' ##2014 April 21st to 25th
+#' x <- c(41750, 41751, 41752, 41753, 41754) 
+#' convertToDate(x)
+convertToDate <- function(x, origin = "1970-1-1"){
+  as.Date(x - 25569, origin = origin)  
+}
+
+
+# #' @name convertToTime
+# #' @title Convert from excel time number to R Date type
+# #' @param x A numeric vector
+# #' @param origin date. Default value is for Windows Excel 2010
+# #' @details Excel stores dates as number of days from some origin day
+# #' (this origin is "1970-1-1" for Excel 2010).
+# #' @export
+# #' @examples
+# #' ##2014 April 21st to 25th
+# #' x <- c(41750, 41751, 41752, 41753, 41754) 
+# #' convertToDate(x)
+# convertToTime <- function(x){
+#  
+#   if(!all(x <= 1, na.rm=TRUE))
+#     stop("All elements of x must be less than or equal to 1")
+#   
+#   y <- x[!is.na(x)]
+#   fraction <- 24*y
+#   hrs <- floor(fraction)
+#   minFrac <- (fraction-hrs)*60
+#   mins <- floor(minFrac)
+#   secs <- (minFrac - mins)*60
+#   y <- paste(hrs, mins, secs, sep = ":")
+#   y <- format(strptime(y, "%H:%M:%S"), "%H:%M:%S")
+#   x[!is.na(x)] <- y
+#   
+#   return(x)
+# }
+
+
 

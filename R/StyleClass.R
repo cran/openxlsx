@@ -29,17 +29,17 @@ Style <- setRefClass("Style",
 
 Style$methods(initialize = function(){
   
-  fontName <<- list("val" = "Calibri")
-  fontColour <<- list("val" = 8)
-  fontSize <<- list("val" = 11)
+  fontName <<- NULL
+  fontColour <<- NULL
+  fontSize <<- NULL
   fontFamily <<- NULL
   fontScheme <<- NULL
   fontDecoration <<- NULL
   
-  borderTop <<- FALSE
-  borderLeft <<- FALSE
-  borderRight <<- FALSE
-  borderBottom <<- FALSE
+  borderTop <<- NULL
+  borderLeft <<- NULL
+  borderRight <<- NULL
+  borderBottom <<- NULL
   borderTopColour <<- NULL
   borderLeftColour <<- NULL
   borderRightColour <<- NULL
@@ -88,7 +88,7 @@ Style$methods(show = function(print = TRUE){
   styleShow <- append(styleShow, sprintf("Font colour: %s \n", gsub("^FF", "#", fontColour[[1]])))  ## Font colour
   
   ## Font decoration
-  if(!is.null(fontDecoration))
+  if(length(fontDecoration) > 0)
     styleShow <- append(styleShow, sprintf("Font decoration: %s \n", paste(fontDecoration, collapse = ", ")))
   
   if(length(borders) > 0){

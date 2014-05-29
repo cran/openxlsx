@@ -1,4 +1,3 @@
-
 #include <Rcpp.h>
 #include <iostream>
 #include <fstream>
@@ -116,11 +115,11 @@ SEXP getChildlessNode(std::string xml, std::string tag){
 
   while(1){
     
-    pos = xml.find(tag, pos+1);
-    endPos = xml.find(tagEnd, pos+k);
-    
+    pos = xml.find(tag, pos+1);    
     if(pos == std::string::npos)
       break;
+      
+    endPos = xml.find(tagEnd, pos+k);
     
     r.push_back(xml.substr(pos, endPos-pos+2).c_str());
     
@@ -349,7 +348,7 @@ SEXP getFunction(CharacterVector x){
 
 
 // [[Rcpp::export]]
-SEXP getRefs(CharacterVector x){
+SEXP getRefs(CharacterVector x, int startRow){
 
   int n = x.size();
   
@@ -364,16 +363,50 @@ SEXP getRefs(CharacterVector x){
   std::string rtag = "r=";
   std::string rtagEnd = "\"";
 
-  for(int i = 0; i < n; i++){ 
+  if(startRow == 1){
+    for(int i = 0; i < n; i++){ 
+      
+      // find opening tag     
+      xml = x[i];
+      pos = xml.find(rtag, 0);
+      endPos = xml.find(rtagEnd, pos+3);
+      r[i] = xml.substr(pos+3, endPos-pos-3).c_str();
+      
+    }
+  
+  }else{
     
-    // find opening tag     
-    xml = x[i];
-    pos = xml.find(rtag, 0);
-    endPos = xml.find(rtagEnd, pos+3);
-    r[i] = xml.substr(pos+3, endPos-pos-3).c_str();
-    
-  }
+    // if a startRow is specified
+    // loop throught v, if row is less than startRow, remove from r and v
+    int rowN;
+    std::string row;
+    bool below = true;
+  
+    for(int i = 0; i < n; i++){
+      
+      // find opening tag     
+      xml = x[i];
+      pos = xml.find(rtag, 0);
+      endPos = xml.find(rtagEnd, pos+3);
+      r[i] = xml.substr(pos+3, endPos-pos-3).c_str();
 
+      if(below){
+        row = r[i];
+        // remove digits from string
+        row.erase(std::remove_if(row.begin(), row.end(), ::isalpha), row.end());
+        rowN = atoi(row.c_str());   
+        if(rowN < startRow){
+          r[i] = NA_STRING;
+        }else{
+          below = false;
+        } 
+      } 
+    } // end of loop
+    
+    r = na_omit(r);
+    
+  } // end of else
+        
   return wrap(r) ;  
 
 }
@@ -482,24 +515,33 @@ CharacterVector getSharedStrings(CharacterVector x){
   std::string tag = ">";
   std::string tagEnd = "<";
 
-  CharacterVector s(n);
+  CharacterVector strs(n);
+  std::fill(strs.begin(), strs.end(), NA_STRING);
+  
+  IntegerVector emptyStrs;
+  
   for(int i = 0; i < n; i++){ 
     
     // find opening tag     
     xml = x[i];
-    pos = xml.find(ttag, 0);
+    pos = xml.find(ttag, 0); // find ttag      
+  
     if(pos != std::string::npos){
-      pos = xml.find(tag, pos+1);
-      endPos = xml.find(tagEnd, pos+2);
-      s[i] = xml.substr(pos+1, endPos-pos - 1).c_str();
-    }else{
-      s[i] = NA_STRING;
+      
+      if(xml[pos+2] == '/'){
+        emptyStrs.push_back(i); //this should only ever grow to length 1
+      }else{
+        pos = xml.find(tag, pos+1); // find where opening ttag ends
+        endPos = xml.find(tagEnd, pos+2); // find where the node ends </t> (closing tag)
+        strs[i] = xml.substr(pos+1, endPos-pos - 1).c_str();
+      }
     }
+    
   }
 
-
-//  s = na_omit(s);
-  return wrap(s) ;  
+  strs.attr("empty") = emptyStrs;
+  
+  return wrap(strs) ;  
 
 }
 
@@ -837,13 +879,14 @@ SEXP convert2ExcelRef(IntegerVector cols, std::vector<std::string> LETTERS){
 // [[Rcpp::export]]
 SEXP ExcelConvertExpand(IntegerVector cols, std::vector<std::string> LETTERS, std::vector<std::string> rows){
   
-  size_t n = cols.size();  
-  size_t nRows = rows.size();
+  int n = cols.size();  
+  int nRows = rows.size();
   std::vector<std::string> res(n);
   
+  //Convert col number to excel col letters
   size_t x;
   size_t modulo;
-  for(size_t i = 0; i < n; i++){
+  for(int i = 0; i < n; i++){
     x = cols[i];
     string columnName;
     
@@ -858,8 +901,8 @@ SEXP ExcelConvertExpand(IntegerVector cols, std::vector<std::string> LETTERS, st
   CharacterVector r(n*nRows);
   CharacterVector names(n*nRows);
   size_t c = 0;
-  for(size_t i=0; i < nRows; i++)
-    for(size_t j=0; j < n; j++){
+  for(int i=0; i < nRows; i++)
+    for(int j=0; j < n; j++){
     r[c] = res[j] + rows[i];
     names[c] = rows[i];
     c++;
@@ -872,11 +915,14 @@ SEXP ExcelConvertExpand(IntegerVector cols, std::vector<std::string> LETTERS, st
 
 
 // [[Rcpp::export]]
-SEXP buildMatrix1(NumericVector v, IntegerVector rowInd, IntegerVector colInd, CharacterVector colNames, int nRows, int nCols){
-  
+SEXP buildMatrixNumeric(NumericVector v, IntegerVector rowInd, IntegerVector colInd,
+CharacterVector colNames, int nRows, int nCols){
+    
   int k = v.size();
   NumericMatrix m(nRows, nCols);
-  for(int i=0;i < k; i++)
+  std::fill(m.begin(), m.end(), NA_REAL);
+  
+  for(int i = 0; i < k; i++)
       m(rowInd[i], colInd[i]) = v[i];
           
   List dfList(nCols);
@@ -898,83 +944,107 @@ SEXP buildMatrix1(NumericVector v, IntegerVector rowInd, IntegerVector colInd, C
 
 
 // [[Rcpp::export]]
-SEXP buildMatrix2(CharacterVector v, IntegerVector rowInd, IntegerVector colInd, CharacterVector colNames, int nRows, int nCols, IntegerVector charCols){
+SEXP buildMatrixMixed(CharacterVector v, IntegerVector rowInd, IntegerVector colInd,
+CharacterVector colNames, int nRows, int nCols, IntegerVector charCols){
   
   int k = v.size();
   Rcpp::CharacterMatrix m(nRows, nCols);
-  
-  for(int i=0;i < k; i++)
+  std::fill(m.begin(), m.end(), NA_STRING);
+    
+  // fill matrix
+  for(int i = 0;i < k; i++){
     m(rowInd[i], colInd[i]) = v[i];
+  }
 
   List dfList(nCols);
+  LogicalVector naElements(nRows);  
+  
   for(int i=0; i < nCols; i++){
     
+    CharacterVector tmp(nRows);
+    for(int ri=0; ri < nRows; ri++)
+      tmp[ri] = m(ri,i);
+      
+    LogicalVector notNAElements = !is_na(tmp);
+  
     // if i in charCols
-    if (std::find(charCols.begin(), charCols.end(), i) != charCols.end()){ 
-     
+    if (std::find(charCols.begin(), charCols.end(), i) != charCols.end()){ // If column is character class
+          
       bool logCol = true;
       for(int ri = 0; ri < nRows; ri++){
-        if((m(ri, i) != "TRUE") & (m(ri, i) != "FALSE")){
-          logCol = false;
-          break;
-         }
+        if(notNAElements[ri]){
+          if((m(ri, i) != "TRUE") & (m(ri, i) != "FALSE")){
+            logCol = false;
+            break;
+           }
+        }
        }
+        
         
       if(logCol){
       
         LogicalVector logtmp(nRows);
-        for(int j=0; j < nRows; ++j)
-          logtmp[j] = m(j,i) == "TRUE";
-      
+        for(int ri=0; ri < nRows; ri++){
+         if(!notNAElements[ri]){
+            logtmp[ri] = NA_LOGICAL; //IF TRUE, TRUE else FALSE
+         }else{
+           logtmp[ri] = (tmp[ri] == "TRUE");
+         }
+        }
         dfList[i] = logtmp;
         
       }else{
-           
-       CharacterVector tmp(nRows);
-        for(int j=0; j < nRows; ++j)
-          tmp[j] = m(j,i);
         
         dfList[i] = tmp;
+        
       }
 
-    }else{
-
-      IntegerVector ntmp(nRows);
-      for(int j=0; j < nRows; ++j)
-        ntmp[j] = atof(m(j,i));   
+    }else{ // else if column NOT character class
+  
         
+      NumericVector ntmp(nRows);
+      for(int ri=0; ri < nRows; ri++){
+        if(notNAElements[ri]){
+          ntmp[ri] = atof(tmp[ri]); 
+        }else{
+          ntmp[ri] = NA_REAL; 
+        }
+      }
+                
       dfList[i] = ntmp;
         
     }
      
   }
-    
+  
   std::vector<int> rowNames(nRows);
   for(int i = 0;i < nRows; ++i)
     rowNames[i] = i+1;
-  
+    
   dfList.attr("names") = colNames;
   dfList.attr("row.names") = rowNames;
   dfList.attr("class") = "data.frame";
 
-  return Rcpp::wrap(dfList);
+  return wrap(dfList);
 
 }
 
 
-
 // [[Rcpp::export]]
-IntegerVector matrixInds(IntegerVector indices) {
+IntegerVector matrixRowInds(IntegerVector indices) {
     
-  IntegerVector uRows = sort_unique(indices);
+  int n = indices.size();
+  LogicalVector notDup = !duplicated(indices);
+  IntegerVector res(n);
   
-  std::vector<int> vo = as< std::vector<int> > (uRows);
-  int k = uRows.size();
-        
-  for(int i = 0; i < k; i++)
-    std::replace(indices.begin(), indices.end(), vo[i], i);
+  int j = -1;
+  for(int i =0; i < n; i ++){
+    if(notDup[i])
+      j++;
+    res[i] = j;
+  }
   
-  return indices;
+  return wrap(res);
   
 }
 
@@ -1030,41 +1100,69 @@ List buildCellMerges(List comps){
 
 
 // [[Rcpp::export]]
-SEXP readWorkbook(CharacterVector v, NumericVector vn, IntegerVector stringInds, CharacterVector r, CharacterVector tR, int nRows, bool hasColNames){
+SEXP readWorkbook(CharacterVector v, NumericVector vn, IntegerVector stringInds, CharacterVector r, CharacterVector tR, int nRows, bool hasColNames, bool skipEmptyRows){
     
+  // Convert r to column number and shift to scale 0:nCols  (from eg. J:AA in the worksheet)
   int nCells = r.size();
-  IntegerVector colNumbers = RcppConvertFromExcelRef(r);
-  int minCol = *std::min_element(colNumbers.begin(), colNumbers.end()); 
-  colNumbers = matrixInds(colNumbers);
+  IntegerVector colNumbers = RcppConvertFromExcelRef(r); 
+  colNumbers = match(colNumbers, sort_unique(colNumbers)) - 1;
   int nCols = *std::max_element(colNumbers.begin(), colNumbers.end()) + 1;
-  int nStringInds = stringInds.size();  
-  
+    
   // Check if first row are all strings
-  bool colNamesExist = false;
-  if((nCols <= nStringInds) & hasColNames){
-    if(nCols == stringInds[nCols-1] + 1)
-      colNamesExist = true;
-  }
+  //get first row number
   
-  StringVector colNames(nCols);
-  if(colNamesExist){
+  // convert first nCols r to firstRowNumbers
+  // convert get r for which firstRowNumbers == firstRowNumbers[0];
+
+  CharacterVector colNames(nCols);
+  IntegerVector removeFlag;
+  int pos = 0;
+  
+  // If we are told colNames exist takle the first row and fill any gaps with X.i
+  if(hasColNames){
+    char name[6];
+    for(int i =0; i < nCols; i++){
+      if(i == colNumbers[pos]){
+        colNames[i] = v[pos];
+        pos = pos + 1;
+      }else{
+        sprintf(&(name[0]), "X%d", i+1);
+        colNames[i] = name;
+      }
+    }
+  
+    // remove elements in tR that appear in the first row (if there are numerics in first row this will remove less elements than pos)
+    CharacterVector::iterator first = r.begin();
+    CharacterVector::iterator last = r.begin() + pos;
+    CharacterVector toRemove(first, last);
+    removeFlag = match(tR, toRemove);
+    tR.erase(tR.begin(), tR.begin() + sum(!is_na(removeFlag)));
     
-    for(int i = 0; i < nCols; i++)
-      colNames[i] = v[i];
+    // remove elements that are now being used as colNames (there are int pos many of these)    
+    //check we have some r left if not return a data.frame with zero rows
+     r.erase(r.begin(), r.begin() +  pos); 
+    if(r.size() == 0){
+      List dfList(nCols);
+      IntegerVector rowNames(0);
+        
+      dfList.attr("names") = colNames;
+      dfList.attr("row.names") = rowNames;
+      dfList.attr("class") = "data.frame";
+      return wrap(dfList);
+    }
     
-    tR.erase(tR.begin(), tR.begin()+nCols);
-    r.erase(r.begin(), r.begin()+nCols);
-    --nRows;
-    nCells = nCells - nCols;
+    colNumbers.erase(colNumbers.begin(), colNumbers.begin() + pos); 
+    nRows--; // decrement number of rows as first row is now being used as colNames
+    nCells = nCells - pos;
     
   }else{
+    char name[6];
     for(int i =0; i < nCols; i++){
-      char name[6];
       sprintf(&(name[0]), "X%d", i+1);
       colNames[i] = name;
     }
   }
-  
+    
   bool allNumeric = false;
   
   if((tR.size() == 0) | (stringInds[0] == -1)) //If the new resized tR is length 0 there are no more strings
@@ -1072,14 +1170,11 @@ SEXP readWorkbook(CharacterVector v, NumericVector vn, IntegerVector stringInds,
   
   // getRow numbers from r 
   IntegerVector rowNumbers(nCells);  
+  IntegerVector uRows;
   if(nCells == nRows*nCols){
-    int count = 0;
-    for(int i = 0; i < nRows; i++){
-      for(int j = 0; j < nCols; j++){
-        rowNumbers[count] = i;
-        count++;
-      }
-    }
+    
+    uRows = seq(0, nRows-1);
+    rowNumbers = rep_each(uRows, nCols); 
     
   }else{
     
@@ -1089,36 +1184,41 @@ SEXP readWorkbook(CharacterVector v, NumericVector vn, IntegerVector stringInds,
       a.erase(std::remove_if(a.begin(), a.end(), ::isalpha), a.end());
       rowNumbers[i] = atoi(a.c_str()) - 1; 
     }
-    rowNumbers = matrixInds(rowNumbers);
+    
+    if(skipEmptyRows){
+      rowNumbers = matrixRowInds(rowNumbers);
+    }else{
+      rowNumbers = rowNumbers - rowNumbers[0];
+    }
+
+    uRows = unique(rowNumbers);
   }
-  
-  IntegerVector uRows = unique(rowNumbers);  
-  
+
   SEXP m;
   if(allNumeric){
     
-    if(colNamesExist){
-      vn.erase(vn.begin(), vn.begin()+nCols);
-      colNumbers.erase(colNumbers.begin(), colNumbers.begin()+nCols); 
-    }
     
-    m = buildMatrix1(vn, rowNumbers, colNumbers, colNames, nRows, nCols);
+    if(hasColNames) // remove elements that have been "used"
+      vn.erase(vn.begin(), vn.begin() + pos);
+
+    m = buildMatrixNumeric(vn, rowNumbers, colNumbers, colNames, nRows, nCols);
     
   }else{
+        
+    if(hasColNames)// remove elements that have been "used"
+      v.erase(v.begin(), v.begin() + pos);
+
+    // If it contains any strings it will be a character column
+    IntegerVector charCols = match(tR, r);    
     
-    if(colNamesExist){
-      v.erase(v.begin(), v.begin()+nCols);
-      colNumbers.erase(colNumbers.begin(), colNumbers.begin()+nCols); 
-    }
+    int tRSize = tR.size();
+    IntegerVector charColNumbers(tRSize);
+
+    for(int i = 0; i < tRSize; i++)
+      charColNumbers[i] = colNumbers[charCols[i]-1];
     
-    IntegerVector charCols = RcppConvertFromExcelRef(tR);
-    charCols = unique(charCols);
-    
-    int nCharCols = charCols.size();
-    for(int i=0; i < nCharCols; i++)
-      charCols[i] = charCols[i] - minCol;
-    
-    m = buildMatrix2(v, rowNumbers, colNumbers, colNames, nRows, nCols, charCols);
+    charCols = unique(charColNumbers);
+    m = buildMatrixMixed(v, rowNumbers, colNumbers, colNames, nRows, nCols, charCols);
     
   }
     
@@ -1287,7 +1387,7 @@ CharacterVector buildCellXML(std::string prior, std::string post, List sheetData
   CharacterVector charRows(rows);
   
   IntegerVector colNames(n) ;
-  CharacterVector cols(n) ; 
+  std::vector<std::string> cols(n) ; 
   for(size_t i = 0; i < n; i++){
     colNames[i] = atoi(colNamesTemp[i]);
     CharacterVector temp = sheetData[i] ;
@@ -1298,8 +1398,8 @@ CharacterVector buildCellXML(std::string prior, std::string post, List sheetData
   for(size_t i = 0; i < k; i++){ 
     
     int r = rows[i]; // used to subset cells
-    CharacterVector cellRef; // required for ordering
-    IntegerVector cellInd;
+    std::vector<std::string> cellRef; // required for ordering
+    std::vector<int> cellInd;
     IntegerVector orderInds;
 
     for(size_t j = 0; j < n; j++){
@@ -1428,60 +1528,15 @@ IntegerVector WhichMatch( IntegerVector a, int b ){
 
   int n = a.size();
 
-  IntegerVector res;
+  std::vector<int> res;
   for(int i =0; i < n; i ++){
     if(a[i] == b)
       res.push_back(i);
   }
 
-  return res ;
+  return wrap(res) ;
 
 }
-
-
-
-
-// [[Rcpp::export]]
-CharacterVector getCellsWithChildren(std::string xmlFile){
-
-  //read in file without spaces
-  std::string xml = cppReadFile(xmlFile);
-
-  std::vector<std::string> r;
-  size_t pos = 0;
-  size_t endPos1 = 0;
-  size_t endPos2 = 0;
-  
-  std::string tag = "<c ";
-  std::string tagEnd1 = ">";
-  std::string tagEnd2 = "</c>";
-
-  size_t k = tag.length();
-  size_t l = tagEnd1.length();
-
-  //find "<c""
-  //find ">" after "<c"
-  //If char before > is / break else look for </c
-  
-  while(1){
-    
-    pos = xml.find(tag, pos+2);
-    endPos1 = xml.find(tagEnd1, pos+k);
-    
-    if((pos == std::string::npos) | (endPos1 == std::string::npos))
-      break;
-    
-    if(xml[endPos1-1] != '/'){
-      endPos2 = xml.find(tagEnd2, pos+k);
-      r.push_back(xml.substr(pos, endPos2-pos+l).c_str());
-    }
-        
-  }  
-
-  return wrap(r) ;  
-
-}
-
 
 
 
@@ -1503,7 +1558,6 @@ CharacterVector buildTableXML(std::string id, std::string ref, std::vector<std::
       table += " totalsRowShown=\"0\"><autoFilter ref=\"" + ref + "\"/>";
   }
     
-
       
   for(int i = 0; i < n; i ++){
     tableCols += "<tableColumn id=\"" + itos(i+1) + "\" name=\"" + colNames[i] + "\"/>";
@@ -1664,3 +1718,187 @@ List writeCellStyles(List sheetData, CharacterVector rows, IntegerVector cols, S
   return wrap(newSheetData);
 
 }
+
+
+// [[Rcpp::export]]  
+SEXP calcNRows(CharacterVector x, bool skipEmptyRows){
+ 
+  int n = x.size();
+  int nRows;
+ 
+  if(skipEmptyRows){
+   
+    CharacterVector res(n);
+    std::string r;
+    for(int i = 0; i < n; i++){
+      r = x[i];
+      r.erase(std::remove_if(r.begin(), r.end(), ::isalpha), r.end());
+      res[i] = r;
+    }
+    
+    CharacterVector uRes = unique(res);
+    nRows = uRes.size();
+      
+  }else{
+   
+    std::string fRef = as<std::string>(x[0]);
+    std::string lRef = as<std::string>(x[n-1]);
+    fRef.erase(std::remove_if(fRef.begin(), fRef.end(), ::isalpha), fRef.end());
+    lRef.erase(std::remove_if(lRef.begin(), lRef.end(), ::isalpha), lRef.end());
+    int firstRow = atoi(fRef.c_str());
+    int lastRow = atoi(lRef.c_str());
+    nRows = lastRow - firstRow + 1;
+
+  }
+
+  return wrap(nRows);
+
+}
+
+
+
+// [[Rcpp::export]]  
+CharacterVector buildCellTypes(CharacterVector classes, int nRows){
+  
+  
+  int nCols = classes.size();
+  CharacterVector colLabels(nCols);
+  for(int i=0; i < nCols; i++){
+    
+    if((classes[i] == "numeric") | (classes[i] == "integer") | (classes[i] == "raw") ){
+     colLabels[i] = "n"; 
+    }else if(classes[i] == "character"){
+      colLabels[i] = "s"; 
+    }else if(classes[i] == "logical"){
+      colLabels[i] = "b";
+    }else if(classes[i] == "hyperlink"){
+      colLabels[i] = "h";
+    }else{
+      colLabels[i] = "s";
+    }
+        
+  }
+  
+  CharacterVector cellTypes = rep(colLabels, nRows); 
+  
+  return wrap(cellTypes);
+  
+  
+}
+
+
+
+// [[Rcpp::export]]
+CharacterVector removeEmptyNodes(CharacterVector x, CharacterVector emptyNodes){
+
+  int n = x.size();
+  int nEmpty = emptyNodes.size();
+  
+  std::string cell;
+  std::string emptyNode;
+  
+  
+  for(int e = 0; e < nEmpty; e++){
+    
+    emptyNode = emptyNodes[e];
+  
+    for(int i =0; i<n;i++){
+      cell = x[i];
+    
+      if(cell.find(emptyNode, 0) != std::string::npos){
+        if(cell.find("t=\"s\"", 0) != std::string::npos){
+          x[i] = NA_STRING;
+        }
+      }
+    }   
+  }
+  
+  x = na_omit(x);
+
+  return wrap(x);
+  
+}
+
+
+
+// [[Rcpp::export]]
+CharacterVector getCellsWithChildren(std::string xmlFile, CharacterVector emptyNodes){
+
+ //read in file without spaces
+  std::string xml = cppReadFile(xmlFile);
+      
+ // std::string tag = "<c ";
+//  std::string tagEnd1 = ">";
+//  std::string tagEnd2 = "</c>";
+
+  // count cells with children
+  int occurrences = 0;
+  string::size_type start = 0;
+  while ((start = xml.find("</v>", start)) != string::npos) {
+      ++occurrences;
+      start += 4;
+  }
+  
+  CharacterVector cells(occurrences);
+  std::fill(cells.begin(), cells.end(), NA_STRING);
+
+  //find "<c"
+  //find ">" after "<c"
+  //If char before > is / break else look for </c
+  int i = 0;
+  size_t pos = 0;
+  size_t nextPos = 3;
+  size_t vPos = 2;
+  std::string sub;
+  
+  while(i < occurrences){
+    
+    pos = xml.find("<c ", pos+3); 
+    
+    if(pos != std::string::npos){
+      nextPos = xml.find("<c ", pos+10);
+      vPos = xml.find("</v>", pos+8); // have to atleast pass <c r="XX">
+      
+      if(vPos < nextPos){
+        cells[i] = xml.substr(pos, nextPos-pos);
+        i++;
+      }
+    }
+  }
+     
+  if(emptyNodes[0] != "")
+    cells = removeEmptyNodes(cells, emptyNodes);
+     
+  return wrap(cells) ;  
+
+}
+
+
+// [[Rcpp::export]]
+SEXP getHyperlinkRefs(CharacterVector x){
+
+  int n = x.size();
+    
+  std::string xml;
+  CharacterVector r(n);
+  size_t pos = 0;
+  size_t endPos = 0;
+
+  std::string rtag = "ref=";
+  std::string rtagEnd = "\"";
+
+  for(int i = 0; i < n; i++){ 
+      
+    // find opening tag     
+    xml = x[i];
+    pos = xml.find(rtag, 0);
+    endPos = xml.find(rtagEnd, pos+5);
+    r[i] = xml.substr(pos+5, endPos-pos-5).c_str();
+      
+  }
+  
+  return wrap(r) ;  
+
+}
+
+
