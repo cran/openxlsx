@@ -18,7 +18,7 @@
 #' "\code{surrounding}", a border is drawn around the data.  If "\code{rows}",
 #' a surrounding border is drawn with a border around each row. If
 #' "\code{columns}", a surrounding border is drawn with a border between
-#' each column.
+#' each column. If "\code{all}" all cell borders are drawn.
 #' @param borderColour Colour of cell border.  A valid colour (belonging to \code{colours()} or a hex colour code, eg see \href{http://www.colorpicker.com}{here}).
 #' @param borderStyle Border line style
 #' \itemize{
@@ -38,10 +38,13 @@
 #'    \item{\bold{slantDashDot}}{ slanted dash-dot border}
 #'   }
 #' @param ...  Further arguments (for future use)
-#' @seealso \code{\link{writeData}}
+#' @seealso \code{\link{writeDataTable}}
 #' @export writeData
 #' @rdname writeData
 #' @examples
+#' 
+#' ## See formatting vignette for further examples. 
+#' 
 #' wb <- createWorkbook()
 #' options("openxlsx.borderStyle" = "thin")
 #' options("openxlsx.borderColour" = "#4F81BD")
@@ -74,88 +77,14 @@
 #' writeData(wb, "Cars", x, colNames = TRUE, rowNames = TRUE,
 #'           startCol="O", startRow = 23, borders="columns", headerStyle = hs2)
 #' 
+#' ## Write a hyperlink vector
+#' v <- rep("http://cran.r-project.org/", 4)
+#' names(v) <- paste("Hyperlink", 1:4) # Names will be used as display text
+#' class(v) <- 'hyperlink'
+#' writeData(wb, "Cars", x = v, xy = c("B", 32))
+
 #' ## Save workbook
 #' saveWorkbook(wb, "writeDataExample.xlsx", overwrite = TRUE)
-#' 
-#' \dontrun{
-#'
-#' ## inspired by xtable gallery
-#' ##' http://cran.r-project.org/web/packages/xtable/vignettes/xtableGallery.pdf
-#' 
-#' ## Create a new workbook
-#' wb <- createWorkbook()
-#' data(tli, package = "xtable")
-#' 
-#' ## TEST 1 - data.frame
-#' test.n <- "data.frame"
-#' my.df <- tli[1:10, ]
-#' addWorksheet(wb = wb, sheetName = test.n)
-#' writeData(wb = wb, sheet = test.n, x = my.df, borders = "n")
-#' 
-#' ## TEST 2 - matrix
-#' test.n <- "matrix"
-#' design.matrix <- model.matrix(~ sex * grade, data = my.df)
-#' addWorksheet(wb = wb, sheetName = test.n)
-#' writeData(wb = wb, sheet = test.n, x = design.matrix)
-#' 
-#' ## TEST 3 - aov
-#' test.n <- "aov"
-#' fm1 <- aov(tlimth ~ sex + ethnicty + grade + disadvg, data = tli)
-#' addWorksheet(wb = wb, sheetName = test.n)
-#' writeData(wb = wb, sheet = test.n, x = fm1)
-#' 
-#' ## TEST 4 - lm
-#' test.n <- "lm"
-#' fm2 <- lm(tlimth ~ sex*ethnicty, data = tli)
-#' addWorksheet(wb = wb, sheetName = test.n)
-#' writeData(wb = wb, sheet = test.n, x = fm2)
-#' 
-#' ## TEST 5 - anova 1 
-#' test.n <- "anova"
-#' my.anova <- anova(fm2)
-#' addWorksheet(wb = wb, sheetName = test.n)
-#' writeData(wb = wb, sheet = test.n, x = my.anova)
-#' 
-#' ## TEST 6 - anova 2
-#' test.n <- "anova2"
-#' fm2b <- lm(tlimth ~ ethnicty, data = tli)
-#' my.anova2 <- anova(fm2b, fm2)
-#' addWorksheet(wb = wb, sheetName = test.n)
-#' writeData(wb = wb, sheet = test.n, x = my.anova2)
-#' 
-#' ## TEST 7 - GLM
-#' test.n <- "glm"
-#' fm3 <- glm(disadvg ~ ethnicty*grade, data = tli, family = binomial())
-#' addWorksheet(wb = wb, sheetName = test.n)
-#' writeData(wb = wb, sheet = test.n, x = fm3)
-#'
-#' ## TEST 8 - prcomp
-#' test.n <- "prcomp"
-#' pr1 <- prcomp(USArrests)
-#' addWorksheet(wb = wb, sheetName = test.n)
-#' writeData(wb = wb, sheet = test.n, x = pr1)
-#' 
-#' ## TEST 9 - summary.prcomp
-#' test.n <- "summary.prcomp"
-#' addWorksheet(wb = wb, sheetName = test.n)
-#' writeData(wb = wb, sheet = test.n, x = summary(pr1))
-#'
-#' ## TEST 10 - simple table
-#' test.n <- "table"
-#' data(airquality)
-#' airquality$OzoneG80 <- factor(airquality$Ozone > 80,
-#'                               levels = c(FALSE, TRUE),
-#'                               labels = c("Oz <= 80", "Oz > 80"))
-#' airquality$Month <- factor(airquality$Month,
-#'                            levels = 5:9,
-#'                            labels = month.abb[5:9])
-#' my.table <- with(airquality, table(OzoneG80,Month) )
-#' addWorksheet(wb = wb, sheetName = test.n)
-#' writeData(wb = wb, sheet = test.n, x = my.table)
-#' 
-#' ## Save workbook
-#' saveWorkbook(wb, "classTests.xlsx",  overwrite = TRUE)
-#' }
 writeData <- function(wb, 
                       sheet,
                       x,
@@ -165,10 +94,18 @@ writeData <- function(wb,
                       colNames = TRUE,
                       rowNames = FALSE,
                       headerStyle = NULL,
-                      borders = c("none","surrounding","rows","columns"),
+                      borders = c("none","surrounding","rows","columns", "all"),
                       borderColour = getOption("openxlsx.borderColour", "black"),
                       borderStyle = getOption("openxlsx.borderStyle", "thin"),
                       ...){
+  
+  ## increase scipen to avoid writing in scientific 
+  exSciPen <- options("scipen")
+  options("scipen" = 10000)
+  on.exit(options("scipen" = exSciPen), add = TRUE)
+  
+  if(is.null(x))
+    return(invisible(0))
   
   ## All input conversions/validations
   if(!is.null(xy)){
@@ -179,7 +116,8 @@ writeData <- function(wb,
   }
   
   ## convert startRow and startCol
-  startCol <- convertFromExcelRef(startCol)
+  if(!is.numeric(startCol))
+    startCol <- convertFromExcelRef(startCol)
   startRow <- as.integer(startRow)
   
   if(!"Workbook" %in% class(wb)) stop("First argument must be a Workbook.")
@@ -191,13 +129,14 @@ writeData <- function(wb,
   if(length(borders) != 1) stop("borders argument must be length 1.")    
   
   ## borderColours validation
-  borderColour <- validateColour(borderColour)
+  borderColour <- validateColour(borderColour, "Invalid border colour")
   borderStyle <- validateBorderStyle(borderStyle)[[1]]
   
   ## Have decided to not use S3 as too much code duplication with input checking/converting
   ## given that everything has to fit into a grid.
   
   clx <- class(x)
+  hlinkNames <- NULL
   if(any(c("data.frame", "data.table") %in% clx)){
     ## Do nothing
     
@@ -221,7 +160,7 @@ writeData <- function(wb,
     x <- cbind(data.frame("Variable" = rownames(x)), x)
     names(x)[1] <- ""
     rowNames <- FALSE
-        
+    
   }else if("anova" %in% clx){
     
     x <- cbind(x)
@@ -244,25 +183,96 @@ writeData <- function(wb,
     rowNames <- FALSE
     
   }else if("prcomp" %in% clx){
-      
+    
     x <- as.data.frame(x$rotation)
     x <- cbind(data.frame("Variable" = rownames(x)), x)
     names(x)[1] <- ""
     rowNames <- FALSE
-          
+    
   }else if("summary.prcomp" %in% clx){
-          
-     x <- as.data.frame(x$importance)
-     x <- cbind(data.frame("Variable" = rownames(x)), x)
-     names(x)[1] <- ""
-     rowNames <- FALSE
+    
+    x <- as.data.frame(x$importance)
+    x <- cbind(data.frame("Variable" = rownames(x)), x)
+    names(x)[1] <- ""
+    rowNames <- FALSE
 
+  }else if("survdiff" %in% clx){
+
+    ## like print.survdiff with some ideas from the ascii package
+    if (length(x$n) == 1) {
+      z <- sign(x$exp - x$obs) * sqrt(x$chisq)
+      temp <- c(x$obs, x$exp, z, 1 - pchisq(x$chisq,  1))
+      names(temp) <- c("Observed", "Expected", "Z", "p")
+      x <- as.data.frame(t(temp))
+    }
+    else {                              
+      if (is.matrix(x$obs)) {
+        otmp <- apply(x$obs, 1, sum)
+        etmp <- apply(x$exp, 1, sum)
+      }
+      else {
+        otmp <- x$obs
+        etmp <- x$exp
+      }
+      chisq <- c(x$chisq, rep(NA, length(x$n) - 1))
+      df <- c((sum(1 * (etmp > 0))) - 1, rep(NA, length(x$n) - 1))
+      p <- c(1 - pchisq(x$chisq, df[!is.na(df)]), rep(NA, length(x$n) - 1))
+      temp <- cbind( x$n, otmp, etmp, 
+                    ((otmp - etmp)^2)/etmp, ((otmp - etmp)^2)/diag(x$var),
+                    chisq, df, p)
+      colnames(temp) <- c("N", "Observed", "Expected", "(O-E)^2/E", "(O-E)^2/V",
+                          "Chisq", "df","p")
+      temp <- as.data.frame(temp, checknames = FALSE)
+      x <- cbind("Group" = names(x$n), temp)
+      names(x)[1] <- ""
+    }
+    rowNames <- FALSE
+
+  }else if("coxph" %in% clx){
+    ## sligthly modified print.coxph
+    coef <- x$coefficients
+    se <- sqrt(diag(x$var))
+    if (is.null(coef) | is.null(se)) 
+      stop("Input is not valid")
+    if (is.null(x$naive.var)) {
+      tmp <- cbind(coef, exp(coef), se, coef/se, pchisq((coef/se)^2, 1))
+      colnames(tmp) <- c("coef", "exp(coef)", "se(coef)", "z", "p")
+    }
+    else {
+      nse <- sqrt(diag(x$naive.var))
+      tmp <- cbind(coef, exp(coef), nse, se, coef/se, pchisq((coef/se)^2, 1))
+      colnames(tmp) <- c("coef", "exp(coef)", "se(coef)", "robust se", "z", "p")
+    }
+    x <- cbind("Variable" = names(coef), as.data.frame(tmp, checknames = FALSE))
+    names(x)[1] <- ""
+    rowNames <- FALSE
+
+  }else if("summary.coxph" %in% clx){
+
+    coef <- x$coefficients
+    ci <- x$conf.int
+    nvars <- nrow(coef)
+    tmp <- cbind(coef[, - ncol(coef), drop=FALSE],          #p later
+                 ci[, (ncol(ci) - 1):ncol(ci), drop=FALSE], #confint
+                 coef[, ncol(coef), drop=FALSE])            #p.value
+    x <- as.data.frame(tmp, checknames = FALSE)
+    rowNames <- TRUE
+    
+  }else if("cox.zph" %in% clx){
+
+    x <- as.data.frame(x$table)
+    rowNames <- TRUE
+    
   }else{
+    
+    if('hyperlink' %in% tolower(class(x))){
+      hlinkNames <- names(x)
+      class(x) <- c("character", "hyperlink") 
+    }
     x <- as.data.frame(x, stringsAsFactors = FALSE)
     colNames <- FALSE
     rowNames <- FALSE
   }
-  
   
   ## cbind rownames to x
   if(rowNames){
@@ -273,12 +283,17 @@ writeData <- function(wb,
   nCol <- ncol(x)
   nRow <- nrow(x)
   
+  colClasses <- lapply(x, function(x) tolower(class(x)))
+  sheet <- wb$validateSheet(sheet)
+
   ## write data.frame
   wb$writeData(df = x,
                colNames = colNames,
                sheet = sheet,
                startCol = startCol,
-               startRow = startRow)
+               startRow = startRow,
+               colClasses = colClasses,
+               hlinkNames = hlinkNames)
   
   ## header style  
   if(!is.null(headerStyle))
@@ -287,12 +302,57 @@ writeData <- function(wb,
              cols = 0:(nCol-1) + startCol,
              gridExpand = TRUE)
   
-  ## draw borders
-  if( "none" != borders )
-    doBorders(borders = borders, wb = wb,
-              sheet = sheet, startRow = startRow + colNames,
-              startCol = startCol, nrow = nRow, ncol = nCol,
-              borderColour = borderColour, borderStyle = borderStyle)
+  
+  ## hyperlink style, if no borders
+  if(borders == "none"){
+    
+    invisible(classStyles(wb, sheet = sheet, startRow = startRow, startCol = startCol, colNames = colNames, nRow = nrow(x), colClasses = colClasses))
+    
+  }else if(borders == "surrounding"){
+    
+    wb$surroundingBorders(colClasses,
+                          sheet = sheet,
+                          startRow = startRow + colNames,
+                          startCol = startCol,
+                          nRow = nRow, nCol = nCol,
+                          borderColour = list("rgb" = borderColour),
+                          borderStyle = borderStyle)
+    
+  }else if(borders == "rows"){
+    
+    wb$rowBorders(colClasses,
+                  sheet = sheet,
+                  startRow = startRow + colNames,
+                  startCol = startCol,
+                  nRow = nRow, nCol = nCol,
+                  borderColour = list("rgb" = borderColour),
+                  borderStyle = borderStyle)
+    
+  }else if(borders == "columns"){
+    
+    wb$columnBorders(colClasses,
+                     sheet = sheet,
+                     startRow = startRow + colNames,
+                     startCol = startCol,
+                     nRow = nRow, nCol = nCol,
+                     borderColour = list("rgb" = borderColour),
+                     borderStyle = borderStyle)
+    
+    
+  }else if(borders == "all"){
+    
+    wb$allBorders(colClasses,
+                  sheet = sheet,
+                  startRow = startRow + colNames,
+                  startCol = startCol,
+                  nRow = nRow, nCol = nCol,
+                  borderColour = list("rgb" = borderColour),
+                  borderStyle = borderStyle)
+    
+    
+  }
+  
+  invisible(0)
   
 }
 

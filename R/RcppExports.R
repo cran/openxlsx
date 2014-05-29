@@ -77,10 +77,6 @@ constructCellData <- function(cols, LETTERS, rows, t, v) {
     .Call('openxlsx_constructCellData', PACKAGE = 'openxlsx', cols, LETTERS, rows, t, v)
 }
 
-buildCellList212121 <- function(r, t, v, s) {
-    .Call('openxlsx_buildCellList212121', PACKAGE = 'openxlsx', r, t, v, s)
-}
-
 convert2ExcelRef <- function(cols, LETTERS) {
     .Call('openxlsx_convert2ExcelRef', PACKAGE = 'openxlsx', cols, LETTERS)
 }
@@ -113,20 +109,16 @@ quickBuildCellXML <- function(prior, post, sheetData, rowNumbers, R_fileName) {
     .Call('openxlsx_quickBuildCellXML', PACKAGE = 'openxlsx', prior, post, sheetData, rowNumbers, R_fileName)
 }
 
-buildCellXML <- function(prior, post, sheetData, rowHeights, order, R_fileName) {
-    .Call('openxlsx_buildCellXML', PACKAGE = 'openxlsx', prior, post, sheetData, rowHeights, order, R_fileName)
-}
-
-WhichMatch <- function(a, b) {
-    .Call('openxlsx_WhichMatch', PACKAGE = 'openxlsx', a, b)
-}
-
 buildTableXML <- function(id, ref, colNames, showColNames, tableStyle) {
     .Call('openxlsx_buildTableXML', PACKAGE = 'openxlsx', id, ref, colNames, showColNames, tableStyle)
 }
 
 uniqueCellAppend <- function(sheetData, r, newCells) {
     .Call('openxlsx_uniqueCellAppend', PACKAGE = 'openxlsx', sheetData, r, newCells)
+}
+
+getHyperlinkRefs <- function(x) {
+    .Call('openxlsx_getHyperlinkRefs', PACKAGE = 'openxlsx', x)
 }
 
 writeCellStyles <- function(sheetData, rows, cols, styleId, LETTERS) {
@@ -149,7 +141,7 @@ getCellsWithChildren <- function(xmlFile, emptyNodes) {
     .Call('openxlsx_getCellsWithChildren', PACKAGE = 'openxlsx', xmlFile, emptyNodes)
 }
 
-getHyperlinkRefs <- function(x) {
-    .Call('openxlsx_getHyperlinkRefs', PACKAGE = 'openxlsx', x)
+quickBuildCellXML2 <- function(prior, post, sheetData, rowNumbers, rowHeights, R_fileName) {
+    .Call('openxlsx_quickBuildCellXML2', PACKAGE = 'openxlsx', prior, post, sheetData, rowNumbers, rowHeights, R_fileName)
 }
 

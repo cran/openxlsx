@@ -11,7 +11,7 @@
 #' @param colNames If TRUE, column names of x are written.
 #' @param rowNames If TRUE, row names of x are written.
 #' @param tableStyle Any excel table style name or "none".
-#' @details columns of x with class Date/POSIXct/POSIXt, currency, accounting, 
+#' @details columns of x with class Date/POSIXt, currency, accounting, 
 #' hyperlink, percentage are automatically styled as dates, currency, accounting,
 #' hyperlinks, percentages respectively.
 #' @seealso \code{\link{addWorksheet}}
@@ -33,12 +33,14 @@
 #' df <- data.frame("Date" = Sys.Date()-0:19, "T" = TRUE, "F" = FALSE, "Time" = Sys.time()-0:19*60*60,
 #'                  "Cash" = paste("$",1:20), "Cash2" = 31:50,
 #'                  "hLink" = "http://cran.r-project.org/", 
-#'                  "Percentage" = seq(0, 1, length.out=20), stringsAsFactors = FALSE)
+#'                  "Percentage" = seq(0, 1, length.out=20),
+#'                  "TinyNumbers" = runif(20) / 1E9,  stringsAsFactors = FALSE)
 #' 
 #' class(df$Cash) <- "currency"
 #' class(df$Cash2) <- "accounting"
 #' class(df$hLink) <- "hyperlink"
 #' class(df$Percentage) <- "percentage"
+#' class(df$TinyNumbers) <- "scientific"
 #' 
 #' writeDataTable(wb, "S3", x = df, startRow = 4, rowNames=TRUE, tableStyle="TableStyleMedium9")
 #' 
@@ -49,8 +51,13 @@ writeDataTable <- function(wb, sheet, x,
                            xy = NULL,
                            colNames = TRUE,
                            rowNames = FALSE,
-                           tableStyle = "TableStyleMedium2"){
+                           tableStyle = "TableStyleLight9"){
   
+  
+  ## increase scipen to avoid writing in scientific 
+  exSciPen <- options("scipen")
+  options("scipen" = 10000)
+  on.exit(options("scipen" = exSciPen), add = TRUE)
   
   if(!is.null(xy)){
     if(length(xy) != 2)
@@ -67,8 +74,9 @@ writeDataTable <- function(wb, sheet, x,
   if(!is.logical(rowNames)) stop("rowNames must be a logical.")
   
   ## convert startRow and startCol
-  startCol <- convertFromExcelRef(startCol)
-  startRow <- as.numeric(startRow)
+  if(!is.numeric(startCol))
+    startCol <- convertFromExcelRef(startCol)
+  startRow <- as.integer(startRow)
   
   ##Coordinates for each section
   if(rowNames)
@@ -106,76 +114,21 @@ writeDataTable <- function(wb, sheet, x,
   ref2 <- paste0(.Call('openxlsx_convert2ExcelRef', startCol+ncol(x)-1, LETTERS, PACKAGE="openxlsx"), startRow+nrow(x)-1 + showColNames)
   ref <- paste(ref1, ref2, sep = ":")
   
-  ## column class
-  colClasses <- lapply(x, class)
+  ## column class styling
+  colClasses <- lapply(x, function(x) tolower(class(x)))
+  classStyles(wb, sheet = sheet, startRow = startRow, startCol = startCol, colNames = showColNames, nRow = nrow(x), colClasses = colClasses)
   
-  ## Style Dates as DATE  
-  if(any(c("Date", "POSIXct", "POSIXt") %in% unlist(colClasses))){
-    
-    dInds <- which(sapply(colClasses, function(x) "Date" %in% x))    
-    pInds <- which(sapply(colClasses, function(x) any(c("POSIXct", "POSIXt") %in% x)))
-    
-    addStyle(wb, sheet = sheet, style=createStyle(numFmt="Date"), 
-             rows= 1:nrow(x) + startRow + showColNames - 1,
-             cols = unlist(c(dInds, pInds) + startCol - 1), gridExpand = TRUE)
-  }
-  
-  
-  ## style currency as CURRENCY
-  if("currency" %in% tolower(colClasses)){
-    inds <- which(sapply(colClasses, function(x) "currency" %in% tolower(x)))
-    addStyle(wb, sheet = sheet, style=createStyle(numFmt = "CURRENCY"), 
-             rows= 1:nrow(x) + startRow + showColNames - 1,
-             cols = inds + startCol - 1, gridExpand = TRUE)
-  }
-  
-  ## style accounting as ACCOUNTING
-  if("accounting" %in% tolower(colClasses)){
-    inds <- which(sapply(colClasses, function(x) "accounting" %in% tolower(x)))
-    addStyle(wb, sheet = sheet, style=createStyle(numFmt = "ACCOUNTING"), 
-             rows= 1:nrow(x) + startRow + showColNames - 1,
-             cols = inds + startCol - 1, gridExpand = TRUE)  
-  }
-  
-  ## style hyperlinks
-  if("hyperlink" %in% tolower(colClasses)){
-    inds <- which(sapply(colClasses, function(x) "hyperlink" %in% tolower(x)))
-    addStyle(wb, sheet = sheet, style=createStyle(fontColour = "#0000FF", textDecoration = "underline"), 
-             rows= 1:nrow(x) + startRow + showColNames - 1,
-             cols = inds + startCol - 1, gridExpand = TRUE)  
-  }
-  
-  ## style percentages
-  if("percentage" %in% tolower(colClasses)){
-    inds <- which(sapply(colClasses, function(x) "percentage" %in% tolower(x)))
-    addStyle(wb, sheet = sheet, style=createStyle(numFmt = "PERCENTAGE"), 
-             rows= 1:nrow(x) + startRow + showColNames - 1,
-             cols = inds + startCol - 1, gridExpand = TRUE)  
-  }
-  
-  ## style big mark
-  if("3" %in% tolower(colClasses)){
-    inds <- which(sapply(colClasses, function(x) "3" %in% tolower(x)))
-    addStyle(wb, sheet = sheet, style=createStyle(numFmt = "3"), 
-             rows= 1:nrow(x) + startRow + showColNames - 1,
-             cols = inds + startCol - 1, gridExpand = TRUE)  
-  }
-  
-  
-    
   ## write data to sheetData
   wb$writeData(df = x,
                colNames = showColNames,
                sheet = sheet,
                startRow = startRow,
-               startCol = startCol)
+               startCol = startCol,
+               colClasses = colClasses,
+               hlinkNames = NULL)
   
   ## replace invalid XML characters
-  colNames <- gsub('&', "&amp;", colNames)
-  colNames <- gsub('"', "&quot;", colNames)
-  colNames <- gsub("'", "&apos;", colNames)
-  colNames <- gsub('<', "&lt;", colNames)
-  colNames <- gsub('>', "&gt;", colNames)
+  colNames <- replaceIllegalCharacters(colNames)
   
   ## create table.xml and assign an id to worksheet tables
   wb$buildTable(sheet, colNames, ref, showColNames, tableStyle)

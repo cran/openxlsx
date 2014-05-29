@@ -4,7 +4,7 @@
 \title{Write to a worksheet and format as a table}
 \usage{
 writeDataTable(wb, sheet, x, startCol = 1, startRow = 1, xy = NULL,
-  colNames = TRUE, rowNames = FALSE, tableStyle = "TableStyleMedium2")
+  colNames = TRUE, rowNames = FALSE, tableStyle = "TableStyleLight9")
 }
 \arguments{
 \item{wb}{A Workbook object containing a worksheet.}
@@ -30,7 +30,7 @@ A vector of the form c(startCol, startRow)}
 Write to a worksheet and format as a table
 }
 \details{
-columns of x with class Date/POSIXct/POSIXt, currency, accounting,
+columns of x with class Date/POSIXt, currency, accounting,
 hyperlink, percentage are automatically styled as dates, currency, accounting,
 hyperlinks, percentages respectively.
 }
@@ -50,12 +50,14 @@ writeDataTable(wb, "S2", x = mtcars, xy = c("B", 3), rowNames=TRUE, tableStyle="
 df <- data.frame("Date" = Sys.Date()-0:19, "T" = TRUE, "F" = FALSE, "Time" = Sys.time()-0:19*60*60,
                  "Cash" = paste("$",1:20), "Cash2" = 31:50,
                  "hLink" = "http://cran.r-project.org/",
-                 "Percentage" = seq(0, 1, length.out=20), stringsAsFactors = FALSE)
+                 "Percentage" = seq(0, 1, length.out=20),
+                 "TinyNumbers" = runif(20) / 1E9,  stringsAsFactors = FALSE)
 
 class(df$Cash) <- "currency"
 class(df$Cash2) <- "accounting"
 class(df$hLink) <- "hyperlink"
 class(df$Percentage) <- "percentage"
+class(df$TinyNumbers) <- "scientific"
 
 writeDataTable(wb, "S3", x = df, startRow = 4, rowNames=TRUE, tableStyle="TableStyleMedium9")
 
