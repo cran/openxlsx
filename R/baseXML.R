@@ -1,84 +1,110 @@
 
 
 genBaseContent_Type <- function(){
-    
-          c(
-            '<Default Extension="bin" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.printerSettings"/>',
-            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
-            '<Default Extension="xml" ContentType="application/xml"/>',
-            '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>',
-            '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>',
-            '<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>',
-            '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>',
-            '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>',
-            '<Override PartName="/xl/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>'
-          )
-    
+  
+  c(
+    '<Default Extension="bin" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.printerSettings"/>',
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
+    '<Default Extension="xml" ContentType="application/xml"/>',
+    '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>',
+    '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>',
+    '<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>',
+    '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>',
+    '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>',
+    '<Override PartName="/xl/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>'
+  )
+  
 }
 
 
 genBaseRels <- function(){
-
-       list(
-         '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>',
-         '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>',
-         '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>'
-       )
+  
+  list(
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>',
+    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>',
+    '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>'
+  )
 }
 
 
 genBaseApp <- function(){
-       list('<Application>Microsoft Excel</Application>')
+  list('<Application>Microsoft Excel</Application>')
 }
 
 
 genBaseCore <- function(creator){  
   
-             list('<dcterms:created xsi:type="dcterms:W3CDTF">2014-03-07T16:08:25Z</dcterms:created>',
-             sprintf('<dc:creator>%s</dc:creator>', creator))
-
+  list('<dcterms:created xsi:type="dcterms:W3CDTF">2014-03-07T16:08:25Z</dcterms:created>',
+       sprintf('<dc:creator>%s</dc:creator>', creator))
+  
 } 
 
 genBaseWorkbook.xml.rels <- function(){
-
-       c('<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>',
-         '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>',
-         '<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/>')
+  
+  c('<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>',
+    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>',
+    '<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/>')
 }
 
 
 genBaseWorkbook <- function(){
-
-    list(workbookPr = '<workbookPr date1904="false"/>',
-         bookViews = '<bookViews><workbookView activeTab="0"/></bookViews>',
-         sheets = NULL,
-         externalReferences = NULL,
-         definedNames = NULL,
-         calcPr = NULL
-    )
-
+  
+  list(workbookPr = '<workbookPr date1904="false"/>',
+       bookViews = '<bookViews><workbookView activeTab="0"/></bookViews>',
+       sheets = NULL,
+       externalReferences = NULL,
+       definedNames = NULL,
+       calcPr = NULL,
+       pivotCaches = NULL
+  )
+  
 }
 
-genBaseSheet <- function(sheetName, showGridLines = TRUE, tabSelected = FALSE){
+genBaseSheet <- function(sheetName, 
+                         showGridLines = TRUE, 
+                         tabSelected = FALSE, 
+                         tabColour = NULL, 
+                         zoom = 100, 
+                         oddHeader, oddFooter, evenHeader, evenFooter, firstHeader, firstFooter){
   
+  if(!is.null(tabColour))
+    tabColour <- sprintf('<tabColor rgb="%s"/>', tabColour)
   
+  naToNULLList <- function(x){
+    lapply(x, function(x) {
+      if(is.na(x))
+        return(NULL)
+      x})
+  }
+  
+  hf <- list(oddHeader = naToNULLList(oddHeader),
+             oddFooter = naToNULLList(oddFooter),
+             evenHeader = naToNULLList(evenHeader),
+             evenFooter = naToNULLList(evenFooter), 
+             firstHeader = naToNULLList(firstHeader),
+             firstFooter = naToNULLList(firstFooter))
+    
+  if(all(sapply(hf, length) == 0))
+    hf <- NULL
   
   ## list of all possible children
-  tmp <- list(list(dimension = '<dimension ref="A1"/>',
-       sheetViews = sprintf('<sheetViews><sheetView workbookViewId="0" showGridLines="%s" tabSelected="TRUE"/></sheetViews>', as.integer(showGridLines)),
-       sheetFormatPr = '<sheetFormatPr defaultRowHeight="15.0"/>',
-       cols = NULL,
-       sheetData = '<sheetData/>',
-       autoFilter = NULL,
-       mergeCells = NULL,
-       conditionalFormatting = NULL,
-       hyperlinks = NULL,
-       pageMargins = '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>',
-       pageSetup = '<pageSetup paperSize="9" orientation="portrait" horizontalDpi="300" verticalDpi="300" r:id="rId2"/>',  ## will always be 2
-       headerFooter = NULL,
-       drawing = '<drawing r:id=\"rId1\"/>', ## will always be 1
-       tableParts = NULL
-       ))
+  tmp <- list(list(sheetPr = tabColour,
+                   dimension = '<dimension ref="A1"/>',
+                   sheetViews = sprintf('<sheetViews><sheetView workbookViewId="0" zoomScale="%s" showGridLines="%s" tabSelected="%s"/></sheetViews>', as.integer(zoom), as.integer(showGridLines), as.integer(tabSelected)),
+                   sheetFormatPr = '<sheetFormatPr defaultRowHeight="15.0"/>',
+                   cols = NULL,
+                   sheetData = '<sheetData/>',
+                   autoFilter = NULL,
+                   mergeCells = NULL,
+                   conditionalFormatting = NULL,
+                   hyperlinks = NULL,
+                   pageMargins = '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>',
+                   pageSetup = '<pageSetup paperSize="9" orientation="portrait" horizontalDpi="300" verticalDpi="300" r:id="rId2"/>',  ## will always be 2
+                   headerFooter = hf,
+                   drawing = '<drawing r:id=\"rId1\"/>', ## will always be 1
+                   tableParts = NULL,
+                   extLst = NULL
+  ))
   
   names(tmp) <- sheetName
   
@@ -89,36 +115,36 @@ genBaseSheet <- function(sheetName, showGridLines = TRUE, tabSelected = FALSE){
 genBaseSheetRels <- function(sheetInd){
   
   c(
-  sprintf('<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing%s.xml"/>', sheetInd),
-  sprintf('<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/printerSettings" Target="../printerSettings/printerSettings%s.bin"/>', sheetInd)
+    sprintf('<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing%s.xml"/>', sheetInd),
+    sprintf('<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/printerSettings" Target="../printerSettings/printerSettings%s.bin"/>', sheetInd)
   )
-
+  
 }
 
 genBaseStyleSheet <- function(dxfs = NULL){
-   
+  
   list(
     
-       numFmts = NULL,
-       
-       fonts = c('<font><sz val="11"/><color rgb="%s"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font>'),
-       
-       fills = c('<fill><patternFill patternType="none"/></fill>',
-                    '<fill><patternFill patternType="gray125"/></fill>'),
-       
-       borders = c('<border><left/><right/><top/><bottom/><diagonal/></border>'),
-       
-       cellStyleXfs = c('<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>'),
-       
-       cellXfs = c('<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'),
-       
-       cellStyles = c('<cellStyle name="Normal" xfId="0" builtinId="0"/>'),
-       
-       dxfs = dxfs,
-       
-       indexedColors = NULL
+    numFmts = NULL,
+    
+    fonts = c('<font><sz val="11"/><color rgb="FF000000"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font>'),
+    
+    fills = c('<fill><patternFill patternType="none"/></fill>',
+              '<fill><patternFill patternType="gray125"/></fill>'),
+    
+    borders = c('<border><left/><right/><top/><bottom/><diagonal/></border>'),
+    
+    cellStyleXfs = c('<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>'),
+    
+    cellXfs = c('<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'),
+    
+    cellStyles = c('<cellStyle name="Normal" xfId="0" builtinId="0"/>'),
+    
+    dxfs = dxfs,
+    
+    indexedColors = NULL
   )
-        
+  
 }
 
 
@@ -164,55 +190,25 @@ genBaseTable <- function(id, ref, colNames){
   
   table <- paste(c(table, tableCols, tableStyle, '</table>'))
   writeLines(table)
-    
+  
   
 }
 
 
 
 genBaseTheme <- function(){
-    
+  
   '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office Theme">
-  <a:themeElements>
-		<a:clrScheme name="Office">
-  <a:dk1>
-  <a:sysClr val="windowText" lastClr="000000"/>
-  </a:dk1>
-  <a:lt1>
-  <a:sysClr val="window" lastClr="FFFFFF"/>
-  </a:lt1>
-  <a:dk2>
-  <a:srgbClr val="1F497D"/>
-  </a:dk2>
-  <a:lt2>
-  <a:srgbClr val="EEECE1"/>
-  </a:lt2>
-  <a:accent1>
-  <a:srgbClr val="4F81BD"/>
-  </a:accent1>
-  <a:accent2>
-  <a:srgbClr val="C0504D"/>
-  </a:accent2>
-  <a:accent3>
-  <a:srgbClr val="9BBB59"/>
-  </a:accent3>
-  <a:accent4>
-  <a:srgbClr val="8064A2"/>
-  </a:accent4>
-  <a:accent5>
-  <a:srgbClr val="4BACC6"/>
-  </a:accent5>
-  <a:accent6>
-  <a:srgbClr val="F79646"/>
-  </a:accent6>
-  <a:hlink>
-  <a:srgbClr val="0000FF"/>
-  </a:hlink>
-  <a:folHlink>
-  <a:srgbClr val="800080"/>
-  </a:folHlink>
-  </a:clrScheme>
-  <a:fontScheme name="Office">
+  <a:themeElements><a:clrScheme name="Office">
+  <a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1>
+  <a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>
+  <a:dk2><a:srgbClr val="1F497D"/></a:dk2>
+  <a:lt2><a:srgbClr val="EEECE1"/></a:lt2>
+  <a:accent1><a:srgbClr val="4F81BD"/></a:accent1><a:accent2><a:srgbClr val="C0504D"/></a:accent2>
+  <a:accent3><a:srgbClr val="9BBB59"/></a:accent3><a:accent4><a:srgbClr val="8064A2"/></a:accent4>
+  <a:accent5><a:srgbClr val="4BACC6"/></a:accent5><a:accent6><a:srgbClr val="F79646"/></a:accent6>
+  <a:hlink><a:srgbClr val="0000FF"/></a:hlink><a:folHlink><a:srgbClr val="800080"/></a:folHlink>
+  </a:clrScheme><a:fontScheme name="Office">
   <a:majorFont>
   <a:latin typeface="Cambria"/>
   <a:ea typeface=""/>
@@ -278,78 +274,32 @@ genBaseTheme <- function(){
   </a:fontScheme>
   <a:fmtScheme name="Office">
   <a:fillStyleLst>
-  <a:solidFill>
-  <a:schemeClr val="phClr"/>
-  </a:solidFill>
+  <a:solidFill><a:schemeClr val="phClr"/></a:solidFill>
   <a:gradFill rotWithShape="1">
   <a:gsLst>
-  <a:gs pos="0">
-  <a:schemeClr val="phClr">
-  <a:tint val="50000"/>
-  <a:satMod val="300000"/>
-  </a:schemeClr>
-  </a:gs>
-  <a:gs pos="35000">
-  <a:schemeClr val="phClr">
-  <a:tint val="37000"/>
-  <a:satMod val="300000"/>
-  </a:schemeClr>
-  </a:gs>
-  <a:gs pos="100000">
-  <a:schemeClr val="phClr">
-  <a:tint val="15000"/>
-  <a:satMod val="350000"/>
-  </a:schemeClr>
-  </a:gs>
+  <a:gs pos="0"><a:schemeClr val="phClr"><a:tint val="50000"/><a:satMod val="300000"/></a:schemeClr></a:gs>
+  <a:gs pos="35000"><a:schemeClr val="phClr"><a:tint val="37000"/><a:satMod val="300000"/></a:schemeClr></a:gs>
+  <a:gs pos="100000"><a:schemeClr val="phClr"><a:tint val="15000"/><a:satMod val="350000"/></a:schemeClr></a:gs>
   </a:gsLst>
   <a:lin ang="16200000" scaled="1"/>
   </a:gradFill>
   <a:gradFill rotWithShape="1">
   <a:gsLst>
-  <a:gs pos="0">
-  <a:schemeClr val="phClr">
-  <a:shade val="51000"/>
-  <a:satMod val="130000"/>
-  </a:schemeClr>
-  </a:gs>
-  <a:gs pos="80000">
-  <a:schemeClr val="phClr">
-  <a:shade val="93000"/>
-  <a:satMod val="130000"/>
-  </a:schemeClr>
-  </a:gs>
-  <a:gs pos="100000">
-  <a:schemeClr val="phClr">
-  <a:shade val="94000"/>
-  <a:satMod val="135000"/>
-  </a:schemeClr>
-  </a:gs>
+  <a:gs pos="0"><a:schemeClr val="phClr"><a:shade val="51000"/><a:satMod val="130000"/></a:schemeClr></a:gs>
+  <a:gs pos="80000"><a:schemeClr val="phClr"><a:shade val="93000"/><a:satMod val="130000"/></a:schemeClr></a:gs>
+  <a:gs pos="100000"><a:schemeClr val="phClr"><a:shade val="94000"/><a:satMod val="135000"/></a:schemeClr></a:gs>
   </a:gsLst>
   <a:lin ang="16200000" scaled="0"/>
   </a:gradFill>
   </a:fillStyleLst>
   <a:lnStyleLst>
   <a:ln w="9525" cap="flat" cmpd="sng" algn="ctr">
-  <a:solidFill>
-  <a:schemeClr val="phClr">
-  <a:shade val="95000"/>
-  <a:satMod val="105000"/>
-  </a:schemeClr>
+  <a:solidFill><a:schemeClr val="phClr"><a:shade val="95000"/><a:satMod val="105000"/></a:schemeClr>
   </a:solidFill>
-  <a:prstDash val="solid"/>
-  </a:ln>
-  <a:ln w="25400" cap="flat" cmpd="sng" algn="ctr">
-  <a:solidFill>
-  <a:schemeClr val="phClr"/>
-  </a:solidFill>
-  <a:prstDash val="solid"/>
-  </a:ln>
-  <a:ln w="38100" cap="flat" cmpd="sng" algn="ctr">
-  <a:solidFill>
-  <a:schemeClr val="phClr"/>
-  </a:solidFill>
-  <a:prstDash val="solid"/>
-  </a:ln>
+  <a:prstDash val="solid"/></a:ln><a:ln w="25400" cap="flat" cmpd="sng" algn="ctr">
+  <a:solidFill><a:schemeClr val="phClr"/></a:solidFill>
+  <a:prstDash val="solid"/></a:ln>
+  <a:ln w="38100" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln>
   </a:lnStyleLst>
   <a:effectStyleLst>
   <a:effectStyle>
@@ -370,11 +320,7 @@ genBaseTheme <- function(){
   </a:outerShdw>
   </a:effectLst>
   </a:effectStyle>
-  <a:effectStyle>
-  <a:effectLst>
-  <a:outerShdw blurRad="40000" dist="23000" dir="5400000" rotWithShape="0">
-  <a:srgbClr val="000000">
-  <a:alpha val="35000"/>
+  <a:effectStyle><a:effectLst><a:outerShdw blurRad="40000" dist="23000" dir="5400000" rotWithShape="0"><a:srgbClr val="000000"><a:alpha val="35000"/>
   </a:srgbClr>
   </a:outerShdw>
   </a:effectLst>
@@ -382,72 +328,25 @@ genBaseTheme <- function(){
   <a:camera prst="orthographicFront">
   <a:rot lat="0" lon="0" rev="0"/>
   </a:camera>
-  <a:lightRig rig="threePt" dir="t">
-  <a:rot lat="0" lon="0" rev="1200000"/>
-  </a:lightRig>
+  <a:lightRig rig="threePt" dir="t"><a:rot lat="0" lon="0" rev="1200000"/></a:lightRig>
   </a:scene3d>
-  <a:sp3d>
-  <a:bevelT w="63500" h="25400"/>
-  </a:sp3d>
+  <a:sp3d><a:bevelT w="63500" h="25400"/></a:sp3d>
   </a:effectStyle>
   </a:effectStyleLst>
-  <a:bgFillStyleLst>
-  <a:solidFill>
-  <a:schemeClr val="phClr"/>
-  </a:solidFill>
-  <a:gradFill rotWithShape="1">
+  <a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:gradFill rotWithShape="1">
   <a:gsLst>
-  <a:gs pos="0">
-  <a:schemeClr val="phClr">
-  <a:tint val="40000"/>
-  <a:satMod val="350000"/>
-  </a:schemeClr>
-  </a:gs>
-  <a:gs pos="40000">
-  <a:schemeClr val="phClr">
-  <a:tint val="45000"/>
-  <a:shade val="99000"/>
-  <a:satMod val="350000"/>
-  </a:schemeClr>
-  </a:gs>
-  <a:gs pos="100000">
-  <a:schemeClr val="phClr">
-  <a:shade val="20000"/>
-  <a:satMod val="255000"/>
-  </a:schemeClr>
-  </a:gs>
+  <a:gs pos="0"><a:schemeClr val="phClr"><a:tint val="40000"/><a:satMod val="350000"/></a:schemeClr></a:gs>
+  <a:gs pos="40000"><a:schemeClr val="phClr"><a:tint val="45000"/> <a:shade val="99000"/><a:satMod val="350000"/></a:schemeClr></a:gs>
+  <a:gs pos="100000"><a:schemeClr val="phClr"><a:shade val="20000"/><a:satMod val="255000"/></a:schemeClr></a:gs>
   </a:gsLst>
-  <a:path path="circle">
-  <a:fillToRect l="50000" t="-80000" r="50000" b="180000"/>
-  </a:path>
-  </a:gradFill>
-  <a:gradFill rotWithShape="1">
-  <a:gsLst>
-  <a:gs pos="0">
-  <a:schemeClr val="phClr">
-  <a:tint val="80000"/>
-  <a:satMod val="300000"/>
-  </a:schemeClr>
-  </a:gs>
-  <a:gs pos="100000">
-  <a:schemeClr val="phClr">
-  <a:shade val="30000"/>
-  <a:satMod val="200000"/>
-  </a:schemeClr>
-  </a:gs>
+  <a:path path="circle"><a:fillToRect l="50000" t="-80000" r="50000" b="180000"/></a:path></a:gradFill><a:gradFill rotWithShape="1"><a:gsLst>
+  <a:gs pos="0"><a:schemeClr val="phClr"><a:tint val="80000"/><a:satMod val="300000"/></a:schemeClr></a:gs>
+  <a:gs pos="100000"><a:schemeClr val="phClr"><a:shade val="30000"/><a:satMod val="200000"/></a:schemeClr></a:gs>
   </a:gsLst>
-  <a:path path="circle">
-  <a:fillToRect l="50000" t="50000" r="50000" b="50000"/>
-  </a:path>
-  </a:gradFill>
-  </a:bgFillStyleLst>
-  </a:fmtScheme>
-  </a:themeElements>
-  <a:objectDefaults/>
-  <a:extraClrSchemeLst/>
-  </a:theme>'  
+  <a:path path="circle"><a:fillToRect l="50000" t="50000" r="50000" b="50000"/></a:path>
+  </a:gradFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>'  
   
-    
+  
 }
 
 
@@ -460,9 +359,22 @@ genPrinterSettings <- function(){
 }
 
 
+genExtLst <- function(guid, sqref, posColour, negColour){
+  sprintf('<ext uri="{78C0D931-6437-407d-A8EE-F0AAD7539E65}" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"><x14:conditionalFormattings><x14:conditionalFormatting xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main">
+    <x14:cfRule type="dataBar" id="{%s}">
+    <x14:dataBar minLength="0" maxLength="100" border="1" negativeBarBorderColorSameAsPositive="0">
+    <x14:cfvo type="autoMin"/><x14:cfvo type="autoMax"/><x14:borderColor rgb="%s"/><x14:negativeFillColor rgb="%s"/><x14:negativeBorderColor rgb="%s"/><x14:axisColor rgb="FF000000"/>
+    </x14:dataBar></x14:cfRule><xm:sqref>%s</xm:sqref></x14:conditionalFormatting></x14:conditionalFormattings></ext>', guid, posColour, negColour, negColour, sqref)
+  
+}
 
 
 
-
-
+contentTypePivotXML <- function(i){
+  
+  c(sprintf('<Override PartName="/xl/pivotCache/pivotCacheDefinition%s.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheDefinition+xml"/>', i),
+    sprintf('<Override PartName="/xl/pivotCache/pivotCacheRecords%s.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml"/>', i),
+    sprintf('<Override PartName="/xl/pivotTables/pivotTable%s.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.pivotTable+xml"/>', i))
+    
+}
 

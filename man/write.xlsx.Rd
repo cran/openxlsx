@@ -3,12 +3,14 @@
 \alias{write.xlsx}
 \title{write directly to an xlsx file}
 \usage{
-write.xlsx(x, file, ...)
+write.xlsx(x, file, asTable = FALSE, ...)
 }
 \arguments{
 \item{x}{object or a list of objects that can be handled by \code{\link{writeData}} to write to file}
 
 \item{file}{xlsx file name}
+
+\item{asTable}{write using writeDataTable as opposed to writeData}
 
 \item{...}{optional parameters to pass to functions:
 \itemize{
@@ -32,7 +34,7 @@ Optional parameters are:
   \item{\bold{creator}}{ A string specifying the workbook author}
   \item{\bold{sheetName}}{ Name of the worksheet}
   \item{\bold{gridLines}}{ A logical. If FALSE, the worksheet grid lines will be hidden.}
-  \item{\bold{startCol}}{ A vector specifiying the starting columns(s) to write df}
+  \item{\bold{startCol}}{ A vector specifiying the starting column(s) to write df}
   \item{\bold{startRow}}{ A vector specifiying the starting row(s) to write df}
   \item{\bold{xy}}{ An alternative to specifying startCol and startRow individually.
  A vector of the form c(startCol, startRow)}
@@ -52,30 +54,23 @@ styled as dates and datetimes respectively.
 }
 \examples{
 ## write to working directory
-write.xlsx(iris, file = "writeXLSX1.xlsx", colNames = TRUE, borders = "rows")
-write.xlsx(iris, file = "writeXLSX2.xlsx", colNames = TRUE, borders = "columns",
- borderStyle = "dashed")
-
 options("openxlsx.borderColour" = "#4F80BD") ## set default border colour
-write.xlsx(iris, file = "writeXLSX3.xlsx", colNames = TRUE, borders = "rows",
- sheetName = "Iris data", gridLines = FALSE)
+write.xlsx(iris, file = "writeXLSX1.xlsx", colNames = TRUE, borders = "columns")
+write.xlsx(iris, file = "writeXLSX2.xlsx", colNames = TRUE, borders = "surrounding")
 
-options("openxlsx.borderStyle" = "dashDot")
-write.xlsx(iris, file = "writeXLSX4.xlsx", colNames = TRUE, borders = "rows",
- gridLines = FALSE)
 
-options("openxlsx.borderStyle" = "medium")
 hs <- createStyle(textDecoration = "BOLD", fontColour = "#FFFFFF", fontSize=12,
- fontName="Arial Narrow", fgFill = "#4F80BD")
+                  fontName="Arial Narrow", fgFill = "#4F80BD")
 
-write.xlsx(iris, file = "writeXLSX5.xlsx", colNames = TRUE, borders = "rows",
- headerStyle = hs)
+write.xlsx(iris, file = "writeXLSX3.xlsx", colNames = TRUE, borders = "rows", headerStyle = hs)
 
-## Lists elements are written to individual worksheets
-l <- list(iris, mtcars, matrix(runif(1000), ncol = 5))
-write.xlsx(l, "writeList.xlsx")
-names(l) <- c("IRIS", "MTCARS", "RUNIF")
-write.xlsx(l, "writeList2.xlsx")
+## Lists elements are written to individual worksheets, using list names as sheet names if available
+l <- list("IRIS" = iris, "MTCATS" = mtcars, matrix(runif(1000), ncol = 5))
+write.xlsx(l, "writeList1.xlsx")
+
+## different sheets can be given different parameters
+write.xlsx(l, "writeList2.xlsx", startCol = c(1,2,3), startRow = 2,
+           asTable = c(TRUE, TRUE, FALSE), withFilter = c(TRUE, FALSE, FALSE))
 }
 \author{
 Alexander Walker

@@ -18,6 +18,13 @@ Workbook <- setRefClass("Workbook", fields = c(".rels",
                                                "hyperlinks",
                                                "media",
                                                "printerSettings",
+                                               
+                                               "pivotTables",
+                                               "pivotTables.xml.rels",
+                                               "pivotDefinitions",
+                                               "pivotRecords",
+                                               "pivotDefinitionsRels",
+                                               
                                                "queryTables",
                                                "rowHeights",
                                                "sharedStrings",
@@ -67,10 +74,17 @@ Workbook$methods(initialize = function(creator = Sys.info()[["login"]]){
   connections <<- NULL
   externalLinks <<- NULL
   externalLinksRels <<- NULL
-  headFoot <<- data.frame("text" = rep(NA, 6), "pos" = c("left", "center", "right"), "head" = c("head", "head", "head", "foot", "foot", "foot"), stringsAsFactors = FALSE)
+  headFoot <<- NULL
   printerSettings <<- list()
   hyperlinks <<- list()
   sheetOrder <<- NULL
+  
+  pivotTables <<- NULL
+  pivotTables.xml.rels <<- NULL
+  pivotDefinitions <<- NULL
+  pivotRecords <<- NULL
+  pivotDefinitionsRels <<- NULL
+  
   
   attr(sharedStrings, "uniqueCount") <<- 0
   
@@ -80,7 +94,7 @@ Workbook$methods(zipWorkbook = function(zipfile, files, flags = "-r1", extras = 
   
   ## code from utils::zip function (modified to not print)
   args <- c(flags, shQuote(path.expand(zipfile)), shQuote(files), extras)
-
+  
   if(quiet){
     
     res <- invisible(suppressWarnings(system2(zip, args, stdout = NULL)))
@@ -102,15 +116,23 @@ Workbook$methods(zipWorkbook = function(zipfile, files, flags = "-r1", extras = 
 })
 
 
-Workbook$methods(addWorksheet = function(sheetName, showGridLines = TRUE){
-
+Workbook$methods(addWorksheet = function(sheetName, showGridLines = TRUE, tabColour = NULL, zoom = 100,
+                                         oddHeader = NULL, oddFooter = NULL,
+                                         evenHeader = NULL, evenFooter = NULL,
+                                         firstHeader = NULL, firstFooter = NULL){
+  
   newSheetIndex = length(worksheets) + 1L
   
   ##  Add sheet to workbook.xml
   workbook$sheets <<- c(workbook$sheets, sprintf('<sheet name="%s" sheetId="%s" r:id="rId%s"/>', sheetName, newSheetIndex, newSheetIndex))
   
   ## append to worksheets list
-  worksheets <<- append(worksheets, genBaseSheet(sheetName, showGridLines))
+  worksheets <<- append(worksheets, genBaseSheet(sheetName = sheetName, showGridLines = showGridLines, 
+                                                 tabSelected = newSheetIndex == 1, 
+                                                 tabColour = tabColour, zoom = zoom,
+                                                 oddHeader = oddHeader, oddFooter = oddFooter,
+                                                 evenHeader = evenHeader, evenFooter = evenFooter,
+                                                 firstHeader = firstHeader, firstFooter = firstFooter))
   
   ## update content_tyes
   Content_Types <<- c(Content_Types, sprintf('<Override PartName="/xl/worksheets/sheet%s.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>', newSheetIndex))
@@ -134,7 +156,6 @@ Workbook$methods(addWorksheet = function(sheetName, showGridLines = TRUE){
   freezePane[[newSheetIndex]] <<- list()
   printerSettings[[newSheetIndex]] <<- genPrinterSettings()
   hyperlinks[[newSheetIndex]] <<- ""
-  
   dataCount[[newSheetIndex]] <<- 0
   sheetOrder <<- c(sheetOrder, newSheetIndex)
   
@@ -158,6 +179,7 @@ Workbook$methods(saveWorkbook = function(quiet = TRUE){
   
   nSheets <- length(worksheets)
   nThemes <- length(theme)
+  nPivots <- length(pivotTables)
   
   relsDir <- file.path(tmpDir, "_rels")
   dir.create(path = relsDir, recursive = TRUE)
@@ -207,6 +229,29 @@ Workbook$methods(saveWorkbook = function(quiet = TRUE){
   printDir <- file.path(tmpDir, "xl", "printerSettings")
   dir.create(path = printDir, recursive = TRUE)
   
+  if(nPivots > 0){
+    
+    pivotTablesDir <- file.path(tmpDir, "xl", "pivotTables")
+    dir.create(path = pivotTablesDir, recursive = TRUE)
+    
+    pivotTablesRelsDir <- file.path(tmpDir, "xl", "pivotTables", "_rels")
+    dir.create(path = pivotTablesRelsDir, recursive = TRUE)
+    
+    pivotCacheDir <- file.path(tmpDir, "xl", "pivotCache")
+    dir.create(path = pivotCacheDir, recursive = TRUE)
+    
+    pivotCacheRelsDir <- file.path(tmpDir, "xl", "pivotCache", "_rels")
+    dir.create(path = pivotCacheRelsDir, recursive = TRUE)
+    
+    for(i in 1:nPivots){
+      .Call("openxlsx_writeFile", "", pivotTables[[i]], "", file.path(pivotTablesDir, sprintf("pivotTable%s.xml", i)))
+      .Call("openxlsx_writeFile", "", pivotTables.xml.rels[[i]], "", file.path(pivotTablesRelsDir, sprintf("pivotTable%s.xml.rels", i)))   
+      .Call("openxlsx_writeFile", "", pivotDefinitions[[i]], "", file.path(pivotCacheDir, sprintf("pivotCacheDefinition%s.xml", i)))
+      .Call("openxlsx_writeFile", "", pivotRecords[[i]], "", file.path(pivotCacheDir, sprintf("pivotCacheRecords%s.xml", i)))
+      .Call("openxlsx_writeFile", "", pivotDefinitionsRels[[i]], "", file.path(pivotCacheRelsDir, sprintf("pivotCacheDefinition%s.xml.rels", i)))   
+    }
+    
+  }
   
   ## Write content
   
@@ -417,14 +462,23 @@ Workbook$methods(getSheetName = function(sheetIndex){
 
 
 
-Workbook$methods(buildTable = function(sheet, colNames, ref, showColNames, tableStyle){
+Workbook$methods(buildTable = function(sheet, colNames, ref, showColNames, tableStyle, tableName, withFilter){
   
   ## id will start at 3 and drawing will always be 1, printer Settings at 2 (printer settings has been removed)
   id <- as.character(length(tables) + 3L)
   sheet = validateSheet(sheet)
   
   ## build table XML and save to tables field
-  tables <<- c(tables, .Call("openxlsx_buildTableXML", id, ref, colNames, showColNames, tableStyle, PACKAGE = "openxlsx"))
+  table <- sprintf('<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="%s" name="%s" displayName="%s" ref="%s"', id, tableName, tableName, ref)
+  
+  nms <- names(tables)
+  tSheets <- attr(tables, "sheet")
+  tNames <- attr(tables, "tableName") 
+  
+  tables <<- c(tables, .Call("openxlsx_buildTableXML", table, ref, colNames, showColNames, tableStyle, withFilter, PACKAGE = "openxlsx"))
+  names(tables) <<- c(nms, ref)
+  attr(tables, "sheet") <<- c(tSheets, sheet)
+  attr(tables, "tableName") <<- c(tNames, tableName)
   
   worksheets[[sheet]]$tableParts <<- append(worksheets[[sheet]]$tableParts, sprintf('<tablePart r:id="rId%s"/>', id))
   
@@ -443,8 +497,8 @@ Workbook$methods(buildTable = function(sheet, colNames, ref, showColNames, table
 
 
 
-Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, colClasses, hlinkNames){
-    
+Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, colClasses, hlinkNames, keepNA){
+  
   sheet <- validateSheet(sheet)
   nCols <- ncol(df)
   nRows <- nrow(df)  
@@ -458,8 +512,8 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
       df[,i] <- as.integer(df[,i]) + 25569
     
     t <- format(Sys.time(), "%z")
-    offSet <- ifelse(substr(t,1,1) == "+", 1L, -1L) * (as.integer(substr(t,2,3)) + as.integer(substr(t,4,5)) / 60) / 24
-        
+    offSet <- suppressWarnings(ifelse(substr(t,1,1) == "+", 1L, -1L) * (as.integer(substr(t,2,3)) + as.integer(substr(t,4,5)) / 60) / 24)
+    
     if(is.na(offSet))
       offSet <- 0
     
@@ -469,12 +523,12 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
   }
   
   ## convert any Dates to integers and create date style object
-  if(any(c("currency", "accounting", "percentage", "3") %in% allColClasses)){
-    cInds <- which(sapply(colClasses, function(x) any(c("accounting", "currency", "percentage", "3") %in% tolower(x))))
+  if(any(c("currency", "accounting", "percentage", "3", "comma") %in% allColClasses)){
+    cInds <- which(sapply(colClasses, function(x) any(c("accounting", "currency", "percentage", "3", "comma") %in% tolower(x))))
     for(i in cInds)
       df[,i] <- as.numeric(gsub("[^0-9\\.-]", "", df[,i]))
   }
-
+  
   if("hyperlink" %in% allColClasses){
     for(i in which(sapply(colClasses, function(x) "hyperlink" %in% x)))
       class(df[,i]) <- "hyperlink"
@@ -494,7 +548,7 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
       class(df[,i]) <- "numeric"
   }
   
-
+  
   
   ## convert all numerics to character (this way preserves digits)
   if("numeric" %in% allColClasses){
@@ -502,15 +556,20 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
       class(df[,i]) <- "character"
   }
   
-
-  
   ## cell types
   t <- .Call("openxlsx_buildCellTypes", colClasses, nRows, PACKAGE = "openxlsx")
   
   ## cell values
   v <- as.character(t(as.matrix(df)))
-  v[is.na(v)] <- as.character(NA)
-  t[is.na(v)] <- as.character(NA)
+  
+  if(keepNA){
+    t[is.na(v)] <- "e"
+    v[is.na(v)] <- "#N/A"
+  }else{
+    t[is.na(v)] <- as.character(NA)  
+    v[is.na(v)] <- as.character(NA)
+  }
+  
   
   #prepend column headers 
   if(colNames){
@@ -529,7 +588,7 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
     
     if(length(hInds) > 0){
       t[hInds] <- "s"
-            
+      
       exHlinks <- hyperlinks[[sheet]]
       newHlinks <- r[hInds]
       names(newHlinks) <- replaceIllegalCharacters(v[hInds])
@@ -562,9 +621,6 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
     v[strFlag] <- match(newStrs, sharedStrings) - 1L
   }
   
-  
-  
-  
   ## Create cell list of lists
   
   cells <- .Call("openxlsx_buildCellList", r , t ,v , PACKAGE="openxlsx")
@@ -596,7 +652,13 @@ Workbook$methods(updateCellStyles = function(sheet, rows, cols, styleId){
   
   ## convert sheet name to index
   sheet <- which(names(worksheets) == sheet)
-  sheetData[[sheet]] <<- .Call("openxlsx_writeCellStyles", sheetData[[sheet]], as.character(rows), cols, as.character(styleId), LETTERS)
+  tmp <- .Call("openxlsx_writeCellStyles", sheetData[[sheet]], as.character(rows), cols, as.character(styleId), LETTERS)
+  
+  if(length(tmp) > length(sheetData[[sheet]]))
+    dataCount[[sheet]] <<- dataCount[[sheet]] + 1
+  
+  sheetData[[sheet]] <<- tmp
+  
   
 })
 
@@ -906,7 +968,7 @@ Workbook$methods(writeSheetDataXML = function(xldrawingsDir, xldrawingsRelsDir, 
       ws$cols <- pxml(c("<cols>", worksheets[[i]]$cols, "</cols>"))
     
     if(length(freezePane[[i]]) > 0)
-      ws$sheetViews <- paste0('<sheetViews><sheetView workbookViewId=\"0\" tabSelected=\"TRUE\">', freezePane[[i]], '</sheetView></sheetViews>')
+      ws$sheetViews <- gsub("/></sheetViews>", paste0(">", freezePane[[i]], "</sheetView></sheetViews>"), ws$sheetViews)
     
     if(length(worksheets[[i]]$mergeCells) > 0)
       ws$mergeCells <- paste0(sprintf('<mergeCells count="%s">', length(worksheets[[i]]$mergeCells)), pxml(worksheets[[i]]$mergeCells), '</mergeCells>')
@@ -917,8 +979,18 @@ Workbook$methods(writeSheetDataXML = function(xldrawingsDir, xldrawingsRelsDir, 
       ws$conditionalFormatting <- paste(sapply(uNames, function(x) paste0(sprintf('<conditionalFormatting sqref="%s">', x), pxml(ws$conditionalFormatting[nms == x]), '</conditionalFormatting>')), collapse = "")
     }
     
+    ## Header footer
+    if(!is.null(ws$headerFooter))
+      ws$headerFooter <- genHeaderFooterNode(ws$headerFooter)
+    
+    if(!is.null(ws$sheetPr))
+      ws$sheetPr <- paste0("<sheetPr>", paste(ws$sheetPr, collapse = ""), "</sheetPr>")
+    
     if(length(worksheets[[i]]$tableParts) > 0)
       ws$tableParts <- paste0(sprintf('<tableParts count="%s">', length(worksheets[[i]]$tableParts)), pxml(worksheets[[i]]$tableParts), '</tableParts>')
+    
+    if(length(worksheets[[i]]$extLst) > 0)
+      ws$extLst <- sprintf('<extLst>%s</extLst>', paste(worksheets[[i]]$extLst, collapse = ""))
     
     if(hyperlinks[[i]][[1]] != ""){
       nTables <- length(tables)
@@ -936,8 +1008,8 @@ Workbook$methods(writeSheetDataXML = function(xldrawingsDir, xldrawingsRelsDir, 
       r <- sapply(sheetData[[i]], "[[", "r")      
       sheetData[[i]] <<- sheetData[[i]][order(as.integer(names(r)), nchar(r), r)]
       dataCount[[i]] <<- 1L
-    }    
-        
+    }
+    
     if(length(rowHeights[[i]]) == 0){
       
       .Call("openxlsx_quickBuildCellXML",
@@ -947,7 +1019,7 @@ Workbook$methods(writeSheetDataXML = function(xldrawingsDir, xldrawingsRelsDir, 
             as.integer(names(sheetData[[i]])),
             file.path(xlworksheetsDir, sprintf("sheet%s.xml", i)),
             PACKAGE = "openxlsx")
-            
+      
     }else{
       
       ## row heights will always be in order and all row heights are given rows in preSaveCleanup  
@@ -976,8 +1048,8 @@ Workbook$methods(writeSheetDataXML = function(xldrawingsDir, xldrawingsRelsDir, 
         }
         
         ws_rels <- c(ws_rels, sprintf('<Relationship Id="rId%s" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="%s" TargetMode="External"/>', hInds, iconv(names(hyperlinks[[i]]), from = fromEnc, to = "UTF-8")))
-      
-    }
+        
+      }
       
       .Call("openxlsx_writeFile", '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">', 
             pxml(ws_rels),
@@ -1000,59 +1072,126 @@ Workbook$methods(setColWidths = function(sheet){
   
   widths <- unlist(lapply(colWidths[[sheet]], "[[", "width"))
   cols <- unlist(lapply(colWidths[[sheet]], "[[", "col"))
+  names(widths) <- cols
   
-  autoColsInds <- which(widths == "auto")
+  autoColsInds <- widths == "auto"
   autoCols <- cols[autoColsInds]
-  if(any(widths != "auto"))
-    widths[widths != "auto"] <- as.numeric(widths[widths != "auto"]) + 0.71
   
+  ## If any not auto
+  if(any(!autoColsInds))
+    widths[!autoColsInds] <- as.numeric(widths[!autoColsInds]) + 0.71
   
+  ## If any auto
   if(length(autoCols) > 0){
     
-    ## get all cell values
-    vals <- unlist(lapply(sheetData[[sheet]], "[[", "v"))
-    colInds <- unlist(lapply(sheetData[[sheet]], "[[", "r"))
+    ## only run if data on worksheet
+    if(length(sheetData[[sheet]]) == 0){
+      
+      missingAuto <- autoCols
+      
+    }else{
+      
+      ## First thing - get base font max character width
+      baseFont <- getBaseFont()
+      baseFontName <- unlist(baseFont$name, use.names = FALSE)
+      if(is.null(baseFontName)){
+        baseFontName <- "calibri"
+      }else{
+        baseFontName <- gsub(" ", ".", tolower(baseFontName))
+        if(!baseFontName %in% names(openxlsxFontSizeLookupTable)){
+          baseFontName <- "calibri"
+        }
+      }
+      
+      baseFontSize <- unlist(baseFont$size, use.names = FALSE)
+      if(is.null(baseFontSize)){
+        baseFontSize <- 11
+      }else{
+        baseFontSize <- as.numeric(baseFontSize)
+        baseFontSize <- ifelse(baseFontSize < 8, 8, ifelse(baseFontSize > 36, 36, baseFontSize))
+      }
+      
+      baseFontCharWidth <- openxlsxFontSizeLookupTable[[baseFontName]][baseFontSize - 7]
+      allCharWidths <- rep(baseFontCharWidth, length(sheetData[[sheet]]))
+      #########----------------------------------------------------------------
+      
+      ## get char widths for each style object
+      if(length(styleObjects) > 0){
+        thisSheetName <- names(worksheets)[sheet]
+        
+        # subset styleObjects to this worksheet
+        styleCells <- lapply(styleObjects, "[[", "cells")
+        
+        onSheetInds <- sapply(styleCells, function(x) thisSheetName %in% sapply(x, "[[", "sheet"))
+        stySubset <- lapply(styleObjects[onSheetInds], "[[", "style")
+        styIds <- sapply(styleObjects[onSheetInds], "[[", "id")
+        
+        dupFlag <- duplicated(styIds)
+        styIds <- styIds[!dupFlag]
+        stySubset <- stySubset[!dupFlag]
+        names(stySubset) <- styIds
+        
+        ## loop through stlye objects assignin a charWidth else baseFontCharWidth
+        styleCharWidths <- sapply(stySubset, function(thisStyle){
+          
+          fN <- unlist(thisStyle$fontName, use.names = FALSE)
+          if(is.null(fN)){
+            fN <- "calibri"
+          }else{
+            fN <- gsub(" ", ".", tolower(fN))
+            if(!fN %in% names(openxlsxFontSizeLookupTable)){
+              fN <- "calibri"
+            }
+          }
+          
+          fS <- unlist(thisStyle$fontSize, use.names = FALSE)
+          if(is.null(fS)){
+            fS <- 11
+          }else{
+            fS <- as.numeric(fS)
+            fS <- ifelse(fS < 8, 8, ifelse(fS > 36, 36, fS))
+          }
+          
+          if("BOLD" %in% thisStyle$fontDecoration){
+            styleMaxCharWidth <- openxlsxFontSizeLookupTableBold[[fN]][fS - 7]
+          }else{
+            styleMaxCharWidth <- openxlsxFontSizeLookupTable[[fN]][fS - 7]
+          }
+          
+          styleMaxCharWidth
+          
+        })
+        
+        ## Now we can loop through every cell and calculate assign a character width
+        styRef <- as.numeric(unname(sapply(sheetData[[sheet]], "[[", "s", USE.NAMES = FALSE)))
+        
+        for(i in 1:length(styleCharWidths))
+          allCharWidths[styRef == names(styleCharWidths)[[i]]] <- styleCharWidths[[i]]
+        
+        
+      }
+      
+      ## Now that we have the max character width for the largest font on the page calculate the column widths
+      calculatedWidths <- .Call("openxlsx_calcColumnWidths",
+                                sheetData = sheetData[[sheet]],
+                                sharedStrings = unlist(sharedStrings),
+                                columnInds = as.integer(autoCols),
+                                width = allCharWidths,
+                                baseFontCharWidth = baseFontCharWidth,
+                                minW = getOption("openxlsx.minWidth", 3),
+                                maxW = getOption("openxlsx.maxWidth", 250))
+      
+      missingAuto <- autoCols[!autoCols %in% names(calculatedWidths)]
+      widths[names(calculatedWidths)] <- calculatedWidths + 0.71
+      
+    }
     
-    stringInds <- which(unlist(lapply(sheetData[[sheet]], "[[", "t")) == "s")
-    numericInds <- unlist(lapply(sheetData[[sheet]], "[[", "t")) == "n"
+    widths[missingAuto] <- 9.15
     
-    ## replace string values and remove sharedString tags
-    vals[stringInds] <- sharedStrings[(as.integer(vals[stringInds]) + 1L)]
-    
-    ## charLengths
-    charLengths <- nchar(vals)
-    
-    ## truncate long numerics to 11 characters
-    charLengths[charLengths > 11 & numericInds] <- 11
-    names(charLengths) <- .Call("openxlsx_RcppConvertFromExcelRef", gsub("[0-9]+", "", colInds))
-    
-    
-    #     ##get Cell Styles
-    #     styleInd <- unlist(lapply(sheetData[[sheet]], "[[", "s"))
-    #     size <- list()
-    #     size[which(styleInd == NULL)] <- 11 
-    
-    calcWidths <- round(floor((charLengths*9 + 5)*256 / 9) / 256, 4) + 0.8 ## 0.8 My own adjustment 
-    calcWidths <- calcWidths[!is.na(names(calcWidths))]
-    
-    
-    calcWidths <- lapply(unique(names(calcWidths)), function(x) calcWidths[names(calcWidths) == x])
-    
-    
-    maxWidths <- lapply(calcWidths, max)
-    maxWidths[maxWidths < 8.43] <- 9.15 ## really 8.43 (For some reason excel subtracts 0.72)
-    maxWidths[maxWidths > 50] <- 50.72    
-    
-    widths[autoColsInds] <- maxWidths[autoColsInds]
   }
   
   ## Calculate width of auto
   colNodes <- sprintf('<col min="%s" max="%s" width="%s" customWidth="1"/>', cols, cols, widths)
-  
-  ## Remove any existing widths that appear in cols
-  flag <- !worksheets[[sheet]]$cols %in% cols
-  if(any(flag))
-    worksheets[[sheet]]$cols <<- worksheets[[sheet]]$cols[flag]
   
   ## Append new col widths XML to worksheets[[sheet]]$cols
   worksheets[[sheet]]$cols <<- append(worksheets[[sheet]]$cols, colNodes)
@@ -1194,13 +1333,32 @@ Workbook$methods(conditionalFormatCell = function(sheet, startRow, endRow, start
   nms <- c(names(worksheets[[sheet]]$conditionalFormatting), sqref)
   
   if(type == "expression"){
+    
     cfRule <- sprintf('<cfRule type="expression" dxfId="%s" priority="1"><formula>%s</formula></cfRule>', dxfId, formula)
+    
+  }else if(type == "dataBar"){
+    
+    if(length(formula) == 2){
+      negColour <- formula[[1]]
+      posColour <- formula[[2]]
+    }else{
+      posColour <- formula
+      negColour <- "FFFF0000"
+    }
+    
+    guid <- paste0("F7189283-14F7-4DE0-9601-54DE9DB", 40000L + length(worksheets[[sheet]]$extLst))
+    cfRule <- sprintf('<cfRule type="dataBar" priority="1"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="%s"/></dataBar><extLst><ext uri="{B025F937-C7B1-47D3-B67F-A62EFF666E3E}" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"><x14:id>{%s}</x14:id></ext></extLst></cfRule>', posColour, guid)
+    worksheets[[sheet]]$extLst <<- c(worksheets[[sheet]]$extLst, genExtLst(guid, sqref, posColour, negColour))
+    
   }else if(length(formula) == 2L){
+    
     cfRule <- sprintf('<cfRule type="colorScale" priority="1"><colorScale><cfvo type="min"/><cfvo type="max"/><color rgb="%s"/><color rgb="%s"/></colorScale></cfRule>', formula[[1]], formula[[2]])
+    
   }else{
+    
     cfRule <- sprintf('<cfRule type="colorScale" priority="1"><colorScale><cfvo type="min"/><cfvo type="percentile" val="50"/><cfvo type="max"/><color rgb="%s"/><color rgb="%s"/><color rgb="%s"/></colorScale></cfRule>', formula[[1]], formula[[2]], formula[[3]])
   }
-    
+  
   worksheets[[sheet]]$conditionalFormatting <<- append(worksheets[[sheet]]$conditionalFormatting, cfRule)              
   
   names(worksheets[[sheet]]$conditionalFormatting) <<- nms
@@ -1384,6 +1542,7 @@ Workbook$methods(preSaveCleanUp = function(){
   nSheets <- length(worksheets)
   nThemes <- length(theme)
   nExtRefs <- length(externalLinks)
+  nPivots <- length(pivotDefinitions)
   
   ## add a worksheet if none added
   if(nSheets == 0){
@@ -1415,6 +1574,7 @@ Workbook$methods(preSaveCleanUp = function(){
   extRefInds <- which(targets %in% sprintf("externalLinks/externalLink%s.xml", 1:nExtRefs))
   sharedStringsInd <- which(targets == "sharedStrings.xml")
   tableInds <- which(grepl("table[0-9]+.xml", targets))
+  pivotNode <- workbook.xml.rels[which(targets %in% sprintf("pivotCache/pivotCacheDefinition%s.xml", 1:nPivots))] ## don't want to re-assign rIds for pivot tables
   
   ## Reorder children of workbook.xml.rels
   workbook.xml.rels <<- workbook.xml.rels[c(sheetInds, extRefInds, themeInd, connectionsInd, stylesInd, sharedStringsInd, tableInds)]
@@ -1423,6 +1583,8 @@ Workbook$methods(preSaveCleanUp = function(){
   workbook.xml.rels <<- unlist(lapply(1:length(workbook.xml.rels), function(i) {
     gsub('(?<=Relationship Id="rId)[0-9]+', i, workbook.xml.rels[[i]], perl = TRUE)
   }))
+  
+  workbook.xml.rels <<- c(workbook.xml.rels, pivotNode)
   
   ## Reassign rId to workbook sheet elements, (order sheets by sheetId first)
   sId <- as.integer(unlist(regmatches(workbook$sheets, gregexpr('(?<=sheetId=")[0-9]+', workbook$sheets, perl = TRUE))))
@@ -1442,24 +1604,24 @@ Workbook$methods(preSaveCleanUp = function(){
   ## styles
   numFmtIds <- 50000L
   
+  i <- 1;
   for(x in styleObjects){
     if(length(x$cells) > 0){
-
+      
       this.sty <- x$style$copy()    
       if(this.sty$numFmt$numFmtId == 9999){
         this.sty$numFmt$numFmtId <- numFmtIds
         numFmtIds <- numFmtIds + 1L
       }
-            
+      
       sId <- .self$updateStyles(this.sty)
       for(r in x$cells)
         .self$updateCellStyles(sheet = r$sheet, rows = r$rows, cols = r$cols, sId)
+      
+      styleObjects[[i]]$id <<- sId
     }
+    i <- i + 1;
   }
-  
-  ## Header footer
-  if(any(!is.na(headFoot$text)))
-    .self$setHeaderFooter()
   
   ## Make sure all rowHeights have rows, if not append them!
   for(i in 1:length(worksheets)){
@@ -1484,48 +1646,6 @@ Workbook$methods(preSaveCleanUp = function(){
 
 
 
-
-
-Workbook$methods(setHeaderFooter = function(){
-  
-  headerPos <- headFoot$pos[!is.na(headFoot$text) & headFoot$head == "head"]
-  
-  if(length(headerPos) > 0){
-    headNode <- "<oddHeader>"
-    if("left" %in% headerPos)
-      headNode <- paste0(headNode, "&amp;L",  headFoot$text[headFoot$pos == "left" & headFoot$head == "head"]) 
-    
-    if("center" %in% headerPos)
-      headNode <- paste0(headNode, "&amp;C",  headFoot$text[headFoot$pos == "center" & headFoot$head == "head"]) 
-    
-    if("right" %in% headerPos)
-      headNode <- paste0(headNode, "&amp;R",  headFoot$text[headFoot$pos == "right" & headFoot$head == "head"]) 
-    headNode <- paste0(headNode, "</oddHeader>")
-  }else{
-    headNode <- NULL
-  }
-  
-  
-  footerPos <- headFoot$pos[!is.na(headFoot$text) & headFoot$head == "foot"]
-  
-  if(length(footerPos) > 0){
-    footNode <- "<oddFooter>"
-    if("left" %in% footerPos)
-      footNode <- paste0(footNode, "&amp;L",  headFoot$text[headFoot$pos == "left" & headFoot$head == "foot"]) 
-    
-    if("center" %in% footerPos)
-      footNode <- paste0(footNode, "&amp;C",  headFoot$text[headFoot$pos == "center" & headFoot$head == "foot"]) 
-    
-    if("right" %in% footerPos)
-      footNode <- paste0(footNode, "&amp;R",  headFoot$text[headFoot$pos == "right" & headFoot$head == "foot"]) 
-    footNode <- paste0(footNode, "</oddFooter>")
-  }else{
-    footNode <- NULL
-  }
-  
-  worksheets[[1]]$headerFooter <<- paste0("<headerFooter>", headNode, footNode, "</headerFooter>")
-  
-})
 
 
 
@@ -1576,7 +1696,7 @@ Workbook$methods(show = function(){
     showText <- c(showText, sheetTxt, "\n")
     
   }else{
-    showText <- c(showText, "\nWorksheets:\n", "No worksheets attached")
+    showText <- c(showText, "\nWorksheets:\n", "No worksheets attached\n")
   }
   
   ## images
@@ -1586,12 +1706,477 @@ Workbook$methods(show = function(){
   if(nCharts > 0)
     showText <- c(showText, "\nCharts:\n", sprintf('Chart %s: "%s"\n', 1:nImages, media))
   
-  showText <- c(showText, sprintf("Worksheet write order: %s", paste(sheetOrder, collapse = ", ")))
+  if(nSheets > 0)
+    showText <- c(showText, sprintf("Worksheet write order: %s", paste(sheetOrder, collapse = ", ")))
   
   cat(unlist(showText))
   
 })
 
 
+# ## function to create the below
+# strs <- "data.frame("
+# for(i in 1:nrow(tab))
+#   strs <- append(strs, paste0('"', gsub(" ", ".", tolower(tab$Font[[i]])), '" = ',  paste(capture.output(dput(unname(unlist(tab[1,2:ncol(tab)])))), collapse = ""), ", \n"))
+# strs[length(strs)] <- gsub(", \\\n$", ")", strs[length(strs)])
+# cat(strs)
+
+
+
+## Character width lookup table
+openxlsxFontSizeLookupTable <- 
+  data.frame( "agency.fb"= c(0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.32125, 1.4825, 1.4825, 1.4825, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.25, 2.42875, 2.7325, 2.7325, 2.875, 2.875, 3.07125, 3.07125),
+              "aharoni"= c(0.57125, 0.57125, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 2.875),
+              "algerian"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125, 4.32125),
+              "andalus"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825),
+              "angsana.new"= c(0.3925, 0.3925, 0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.25),
+              "angsanaupc"= c(0.3925, 0.3925, 0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.25),
+              "aparajita"= c(0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 1, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.58875, 2.7325, 2.7325, 2.875),
+              "arial.black"= c(1, 1.17875, 1.32125, 1.4825, 1.4825, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.32125, 4.32125, 4.46375, 4.6075, 4.7675, 4.94625),
+              "arial.narrow"= c(0.57125, 0.71375, 0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.07125, 3.21375, 3.21375),
+              "arial.rounded.mt.bold"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125, 4.32125),
+              "arial.unicode.ms"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825),
+              "arial"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825),
+              "calibri.light"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "calibri"= c(0.71375, 0.8575, 0.8575, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "californian.fb"= c(0.8575, 0.8575, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 2.875, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875, 3.9825),
+              "calisto.mt"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "cambria.math"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825),
+              "cambria"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825),
+              "candara"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875, 3.9825),
+              "castellar"= c(1.17875, 1.17875, 1.4825, 1.625, 1.625, 1.96375, 1.96375, 2.1075, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 4.1425, 4.32125, 4.32125, 4.6075, 4.7675, 4.7675, 5.08875, 5.25, 5.25),
+              "centaur"= c(0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5),
+              "century.gothic"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825),
+              "century.schoolbook"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825),
+              "century"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825),
+              "chiller"= c(0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575),
+              "colonna.mt"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "comic.sans.ms"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.32125, 4.32125, 4.46375),
+              "consolas"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875, 3.9825),
+              "constantia"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.5, 3.5, 3.69625, 3.83875, 3.83875, 3.9825),
+              "cooper.black"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125, 4.32125),
+              "copperplate.gothic.bold"= c(1.17875, 1.17875, 1.4825, 1.4825, 1.625, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 4.1425, 4.32125, 4.32125, 4.6075, 4.6075, 4.7675, 5.08875, 5.08875, 5.25),
+              "copperplate.gothic.light"= c(1.17875, 1.17875, 1.4825, 1.625, 1.625, 1.96375, 1.96375, 2.1075, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675, 4.7675, 5.08875, 5.25, 5.25),
+              "corbel"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "cordia.new"= c(0.3925, 0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.25, 2.42875, 2.58875, 2.58875),
+              "david"= c(0.57125, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375),
+              "dfkai-sb"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "dilleniaupc"= c(0.3925, 0.3925, 0.57125, 0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.32125, 1.4825, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.1075),
+              "dokchampa"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825),
+              "dotum"= c(0.71375, 0.71375, 1.17875, 1, 1, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125),
+              "dotumche"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "ebrima"= c(0.71375, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875),
+              "edwardian.script.itc"= c(0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.21375, 3.3575, 3.3575),
+              "elephant"= c(1.17875, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.5, 3.5, 3.69625, 3.9825, 3.9825, 4.1425, 4.46375, 4.46375, 4.6075, 4.94625, 4.94625, 5.08875, 5.3925, 5.3925, 5.57125),
+              "engravers.mt"= c(1, 1, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 4.1425, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675),
+              "eras.bold.itc"= c(1, 1, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 4.1425, 4.32125, 4.32125, 4.6075, 4.6075, 4.7675),
+              "eras.demi.itc"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.32125, 4.32125, 4.46375),
+              "eras.light.itc"= c(0.71375, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875),
+              "eras.medium.itc"= c(0.8575, 0.8575, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.69625, 3.69625, 3.83875, 3.9825, 3.9825, 4.1425),
+              "estrangelo.edessa"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "eucrosiaupc"= c(0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.58875, 2.7325, 2.7325, 2.875),
+              "euphemia"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125),
+              "fangsong"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "felix.titling"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125),
+              "fixedsys"= c(1, 1, 1, 1, 1, 1, 1, 1, 2.25, 2.25, 2.25, 2.25, 2.25, 2.25, 2.25, 2.25, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 4.7675, 4.7675, 4.7675, 4.7675),
+              "footlight.mt.light"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825),
+              "forte"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "franklin.gothic.book"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 4.1425, 4.1425, 4.32125),
+              "franklin.gothic.demi.cond"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625),
+              "franklin.gothic.demi"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 4.1425, 4.1425, 4.32125),
+              "franklin.gothic.heavy"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 4.1425, 4.1425, 4.32125),
+              "franklin.gothic.medium.cond"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.69625),
+              "franklin.gothic.medium"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 4.1425, 4.1425, 4.32125),
+              "frankruehl"= c(0.57125, 0.57125, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 2.875),
+              "freesiaupc"= c(0.57125, 0.71375, 0.8575, 0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375),
+              "freestyle.script"= c(0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875),
+              "french.script.mt"= c(0.3925, 0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.25, 2.42875, 2.58875, 2.58875),
+              "gabriola"= c(0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 1, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.7325, 2.875),
+              "gadugi"= c(0.71375, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875),
+              "gautami"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125, 4.32125),
+              "georgia"= c(1, 1.17875, 1.17875, 1.32125, 1.32125, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.1075, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.32125, 4.32125, 4.46375),
+              "gigi"= c(0.8575, 0.8575, 0.8575, 0.8575, 1.17875, 1.32125, 1.32125, 1.625, 1.625, 1.625, 1.625, 1.96375, 1.96375, 1.96375, 2.42875, 2.42875, 2.42875, 2.7325, 2.7325, 2.7325, 2.7325, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.5, 3.83875),
+              "gill.sans.mt.condensed"= c(0.3925, 0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.25, 2.42875, 2.58875, 2.58875),
+              "gill.sans.mt.ext.condensed.bold"= c(0.3925, 0.3925, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 1.96375, 2.1075, 2.1075, 2.1075, 2.25, 2.42875, 2.42875),
+              "gill.sans.mt"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "gill.sans.ultra.bold.condensed"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 3.9825, 4.1425, 4.1425),
+              "gill.sans.ultra.bold"= c(1.32125, 1.4825, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.875, 3.07125, 3.07125, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 4.1425, 4.46375, 4.6075, 4.7675, 4.94625, 5.08875, 5.25, 5.57125, 5.71375, 5.71375, 6.0175, 6.19625, 6.3575),
+              "gisha"= c(0.71375, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875),
+              "gloucester.mt.extra.condensed"= c(0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325),
+              "goudy.old.style"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "goudy.stout"= c(1.32125, 1.4825, 1.625, 1.80375, 1.96375, 2.25, 2.25, 2.42875, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.83875, 3.83875, 3.9825, 4.32125, 4.46375, 4.6075, 4.7675, 4.94625, 5.08875, 5.25, 5.3925, 5.57125, 5.875, 6.0175, 6.0175),
+              "gulim"= c(0.71375, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.4825, 1.80375, 1.80375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "gulimche"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "gungsuh"= c(0.71375, 0.71375, 0.8575, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125),
+              "gungsuhche"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "haettenschweiler"= c(0.57125, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375),
+              "harlow.solid.italic"= c(0.785, 0.785, 0.92875, 0.92875, 1.1075, 1.285, 1.285, 1.42875, 1.625, 1.625, 1.7675, 1.94625, 1.94625, 2.1425, 2.1425, 2.285, 2.285, 2.46375, 2.66, 2.66, 2.80375, 2.9825, 2.9825, 3.125, 3.32125, 3.32125, 3.5, 3.5, 3.6425),
+              "harrington"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825),
+              "high.tower.text"= c(0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5),
+              "impact"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825),
+              "imprint.mt.shadow"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "informal.roman"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.69625, 3.83875),
+              "irisupc"= c(0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.58875, 2.7325, 2.7325),
+              "iskoola.pota"= c(0.71375, 0.71375, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.96375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "jasmineupc"= c(0.57125, 0.71375, 0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.07125, 3.21375, 3.21375),
+              "jokerman"= c(1.17875, 1.17875, 1.4825, 1.4825, 1.625, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 4.1425, 4.32125, 4.32125, 4.6075, 4.6075, 4.7675, 5.08875, 5.08875, 5.25),
+              "juice.itc"= c(0.3925, 0.57125, 0.71375, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1.17875, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.58875),
+              "kaiti"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "kalinga"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 3.9825),
+              "kartika"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "khmer.ui"= c(0.71375, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875),
+              "kodchiangupc"= c(0.3925, 0.3925, 0.57125, 0.57125, 0.71375, 0.8575, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.1075, 2.25, 2.25, 2.42875),
+              "kristen.itc"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125, 4.32125),
+              "kunstler.script"= c(0.3925, 0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.42875),
+              "lao.ui"= c(0.71375, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875),
+              "latha"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "leelawadee"= c(0.71375, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875),
+              "levenim.mt"= c(0.8575, 0.8575, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "lilyupc"= c(0.57125, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.07125, 3.21375),
+              "lucida.bright"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.32125, 4.32125, 4.46375),
+              "lucida.calligraphy"= c(1.07125, 1.25, 1.42875, 1.58875, 1.58875, 1.91, 1.94625, 2.1075, 2.25, 2.3925, 2.58875, 2.7675, 2.91, 2.91, 3.285, 3.285, 3.42875, 3.57125, 3.7675, 3.94625, 4.08875, 4.2325, 4.285, 4.6075, 4.6075, 4.75, 4.94625, 5.08875, 5.2675),
+              "lucida.console"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.1425, 4.32125, 4.46375),
+              "lucida.fax"= c(1, 1, 1.17875, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425, 4.46375, 4.46375, 4.6075),
+              "lucida.handwriting"= c(1.07125, 1.25, 1.42875, 1.58875, 1.58875, 1.91, 2.1075, 2.1075, 2.3925, 2.3925, 2.625, 2.7675, 2.91, 3.05375, 3.285, 3.42875, 3.42875, 3.7325, 3.7675, 3.94625, 4.08875, 4.2325, 4.42875, 4.6075, 4.75, 4.75, 5.08875, 5.08875, 5.2675),
+              "lucida.sans.typewriter"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.1425, 4.32125, 4.46375),
+              "lucida.sans.unicode"= c(1, 1, 1.17875, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425, 4.46375, 4.46375, 4.6075),
+              "lucida.sans"= c(1, 1, 1.17875, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425, 4.46375, 4.46375, 4.6075),
+              "magneto"= c(1.17875, 1.32125, 1.625, 1.625, 1.80375, 2.1075, 2.1075, 2.25, 2.58875, 2.7325, 2.7325, 3.07125, 3.21375, 3.21375, 3.5, 3.69625, 3.69625, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675, 4.94625, 5.08875, 5.25, 5.3925, 5.57125, 5.71375),
+              "maiandra.gd"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875, 4.1425, 4.1425, 4.32125),
+              "malgun.gothic"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875, 3.9825),
+              "mangal"= c(0.8575, 0.8575, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "marlett"= c(1.625, 1.80375, 2.1075, 2.25, 2.42875, 2.7325, 2.875, 3.07125, 3.3575, 3.5, 3.69625, 3.9825, 4.1425, 4.32125, 4.6075, 4.7675, 4.94625, 5.25, 5.3925, 5.57125, 5.875, 6.0175, 6.19625, 6.5, 6.6425, 6.82125, 7.125, 7.2675, 7.46375),
+              "matura.mt.script.capitals"= c(1, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675, 4.7675),
+              "meiryo.ui"= c(0.8575, 1, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.9825, 3.9825, 4.1425, 4.32125, 4.46375, 4.46375),
+              "meiryo"= c(0.8575, 1, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.9825, 3.9825, 4.1425, 4.32125, 4.46375, 4.46375),
+              "microsoft.himalaya"= c(0.3925, 0.3925, 0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.25),
+              "microsoft.jhenghei.ui"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 3.9825, 4.1425, 4.1425),
+              "microsoft.jhenghei"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 3.9825, 4.1425, 4.1425),
+              "microsoft.new.tai.lue"= c(0.71375, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875),
+              "microsoft.phagspa"= c(0.71375, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875),
+              "microsoft.sans.serif"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825),
+              "microsoft.tai.le"= c(0.71375, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875),
+              "microsoft.uighur"= c(0.3925, 0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.25, 2.42875, 2.58875, 2.58875),
+              "microsoft.yahei.ui"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 4.1425, 4.1425, 4.32125),
+              "microsoft.yahei"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 4.1425, 4.1425, 4.32125),
+              "microsoft.yi.baiti"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625),
+              "miriam.fixed"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125, 4.32125),
+              "miriam"= c(0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575),
+              "mistral"= c(0.57125, 0.71375, 0.8575, 0.8575, 1, 1.17875, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375),
+              "modern.no..20"= c(0.57125, 0.71375, 0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 2.875, 3.07125, 3.21375, 3.21375),
+              "modern"= c(0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575),
+              "mongolian.baiti"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "monotype.corsiva"= c(0.6425, 0.785, 0.92875, 0.92875, 0.96375, 1.1075, 1.285, 1.285, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.9825, 2.1425, 2.17875, 2.32125, 2.32125, 2.46375, 2.46375, 2.69625, 2.83875, 2.83875, 2.9825, 3.0175, 3.17875, 3.3575, 3.3575, 3.535),
+              "moolboran"= c(0.3925, 0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.42875),
+              "ms.gothic"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "ms.mincho"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "ms.outlook"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "ms.pgothic"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "ms.pmincho"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "ms.reference.sans.serif"= c(1, 1, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.6075),
+              "ms.reference.specialty"= c(1.96375, 2.25, 2.58875, 2.7325, 2.875, 3.3575, 3.5, 3.69625, 4.1425, 4.32125, 4.46375, 4.7675, 5.08875, 5.25, 5.57125, 5.71375, 6.0175, 6.3575, 6.5, 6.6425, 7.125, 7.2675, 7.46375, 7.8925, 8.08875, 8.2325, 8.535, 8.8575, 9),
+              "ms.sans.serif"= c(0.71375, 0.8575, 0.8575, 1.17875, 1.17875, 1.32125, 1.32125, 1.32125, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 1.96375, 2.58875, 2.58875, 2.58875, 2.58875, 2.875, 2.875, 3.07125, 3.07125, 3.07125, 3.07125, 3.5, 3.5, 3.5, 3.83875, 3.83875),
+              "ms.serif"= c(0.57125, 0.71375, 0.71375, 1, 1, 1.17875, 1.17875, 1.17875, 1.32125, 1.625, 1.625, 2.1075, 2.1075, 2.1075, 2.25, 2.25, 2.25, 2.25, 2.58875, 2.58875, 2.58875, 3.69625, 3.69625, 3.69625, 2.875, 3.69625, 3.69625, 3.5, 3.5),
+              "ms.ui.gothic"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "mt.extra"= c(1.625, 1.80375, 2.1075, 2.25, 2.42875, 2.7325, 2.875, 3.07125, 3.3575, 3.5, 3.69625, 4.1425, 4.32125, 4.46375, 4.7675, 4.94625, 5.08875, 5.3925, 5.57125, 5.71375, 6.0175, 6.19625, 6.3575, 6.6425, 6.82125, 6.9825, 7.2675, 7.46375, 7.6075),
+              "mv.boli"= c(1, 1.17875, 1.4825, 1.4825, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675, 4.94625, 5.08875, 5.08875),
+              "narkisim"= c(0.57125, 0.57125, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 2.875),
+              "niagara.engraved"= c(0.3925, 0.3925, 0.3925, 0.57125, 0.57125, 0.71375, 0.8575, 0.8575, 1, 1, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.32125, 1.32125, 1.4825, 1.4825, 1.4825, 1.625, 1.625, 1.625, 1.80375, 1.80375, 1.80375, 1.96375, 1.96375),
+              "niagara.solid"= c(0.3925, 0.3925, 0.57125, 0.57125, 0.57125, 0.71375, 0.8575, 0.8575, 1, 1, 1, 1, 1.17875, 1.17875, 1.17875, 1.32125, 1.32125, 1.32125, 1.4825, 1.4825, 1.4825, 1.625, 1.625, 1.625, 1.80375, 1.80375, 1.80375, 1.96375, 1.96375),
+              "nirmala.ui"= c(0.71375, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875),
+              "nsimsun"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "nyala"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "ocr.a.extended"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.1425, 4.32125, 4.46375),
+              "old.english.text.mt"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "onyx"= c(0.3925, 0.57125, 0.57125, 0.71375, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1, 1, 1, 1.17875, 1.17875, 1.17875, 1.32125, 1.32125, 1.32125, 1.32125, 1.4825, 1.4825, 1.4825, 1.80375, 1.80375, 1.80375, 1.96375, 1.96375, 1.96375),
+              "palace.script.mt"= c(0.42875, 0.42875, 0.6425, 0.6425, 0.6425, 0.785, 0.785, 0.92875, 0.96375, 1.1075, 1.1075, 1.1075, 1.285, 1.32125, 1.4825, 1.4825, 1.4825, 1.625, 1.66, 1.80375, 1.80375, 1.9825, 1.9825, 1.9825, 2.17875, 2.17875, 2.32125, 2.32125, 2.32125),
+              "palatino.linotype"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "papyrus"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 3.07125, 3.07125, 3.07125, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 4.1425, 4.1425, 4.32125),
+              "parchment"= c(0.25, 0.25, 0.25, 0.25, 0.3925, 0.3925, 0.3925, 0.3925, 0.57125, 0.57125, 0.57125, 0.71375, 0.71375, 0.71375, 0.8575, 0.8575, 0.8575, 0.8575, 1, 1, 1, 1, 1.17875, 1.17875, 1.17875, 1.17875, 1.32125, 1.32125, 1.32125),
+              "perpetua.titling.mt"= c(1, 1.17875, 1.32125, 1.4825, 1.4825, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.32125, 4.32125, 4.46375, 4.6075, 4.7675, 4.94625),
+              "perpetua"= c(0.71375, 0.71375, 0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.21375),
+              "plantagenet.cherokee"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625),
+              "playbill"= c(0.3925, 0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.42875),
+              "pmingliu-extb"= c(0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575),
+              "pmingliu"= c(0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575),
+              "poor.richard"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875, 3.9825),
+              "pristina"= c(0.57125, 0.8575, 1, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5),
+              "raavi"= c(1, 1.17875, 1.32125, 1.4825, 1.4825, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675, 4.7675),
+              "rage.italic"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625),
+              "rockwell.condensed"= c(0.3925, 0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.25, 2.42875, 2.58875, 2.58875),
+              "rockwell.extra.bold"= c(1, 1.17875, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.42875, 2.42875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.9825, 4.1425, 4.1425, 4.46375, 4.46375, 4.6075, 4.7675, 4.94625, 5.08875),
+              "rockwell"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825),
+              "rod"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125, 4.32125),
+              "roman"= c(0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575),
+              "sakkal.majalla"= c(0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.58875, 2.7325, 2.7325, 2.875),
+              "script.mt.bold"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "script"= c(0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 1, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.58875, 2.7325, 2.7325, 2.875),
+              "segoe.print"= c(1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.96375, 2.1075, 2.1075, 2.42875, 2.58875, 2.58875, 2.875, 2.875, 3.07125, 3.3575, 3.3575, 3.5, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675, 4.94625, 5.08875, 5.25, 5.3925),
+              "segoe.script"= c(1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.96375, 2.1075, 2.1075, 2.42875, 2.58875, 2.58875, 2.875, 2.875, 3.07125, 3.3575, 3.3575, 3.5, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675, 4.94625, 5.08875, 5.25, 5.3925),
+              "segoe.ui.light"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625),
+              "segoe.ui.semibold"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825),
+              "segoe.ui.semilight"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875, 3.9825),
+              "segoe.ui.symbol"= c(0.71375, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875),
+              "segoe.ui"= c(0.71375, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875),
+              "shonar.bangla"= c(0.71375, 0.71375, 0.8575, 0.8575, 0.8575, 1.17875, 1.17875, 1.32125, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.42875, 2.7325, 2.7325, 2.7325, 2.875, 2.875, 3.07125),
+              "showcard.gothic"= c(1, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425, 4.32125),
+              "shruti"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125, 4.32125),
+              "simhei"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "simplified.arabic.fixed"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125, 4.32125),
+              "simplified.arabic"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "simsun-extb"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "simsun"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "small.fonts"= c(0.71375, 0.71375, 1, 1.32125, 1.32125, 1.32125, 1.625, 1.625, 1.625, 2.1075, 2.1075, 2.1075, 2.25, 2.25, 2.58875, 2.875, 2.58875, 2.58875, 2.875, 2.875, 2.875, 3.5, 3.5, 3.5, 3.5, 3.69625, 3.69625, 3.69625, 3.69625),
+              "snap.itc"= c(1.32125, 1.4825, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675, 5.08875, 5.25, 5.3925, 5.57125, 5.71375, 5.875, 6.19625, 6.3575, 6.3575),
+              "sylfaen"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "symbol"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "tahoma"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 3.9825),
+              "tempus.sans.itc"= c(1, 1.17875, 1.32125, 1.4825, 1.4825, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.32125, 4.32125, 4.46375, 4.6075, 4.7675, 4.94625),
+              "terminal"= c(1, 1, 1, 1.625, 1.625, 1.32125, 1.32125, 1.32125, 1.32125, 2.25, 2.25, 2.25, 2.25, 2.25, 3.5, 3.5, 3.5, 3.5, 2.875, 2.875, 2.875, 4.46375, 4.46375, 4.46375, 4.46375, 4.46375, 5.3925, 5.3925, 5.3925),
+              "times.new.roman"= c(0.71375, 0.71375, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.96375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "traditional.arabic"= c(0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5),
+              "trebuchet.ms"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "tunga"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "tw.cen.mt.condensed.extra.bold"= c(0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5),
+              "tw.cen.mt.condensed"= c(0.3925, 0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.25, 2.42875, 2.58875, 2.58875),
+              "tw.cen.mt"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875, 3.9825),
+              "utsaah"= c(0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 1, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.7325, 2.875),
+              "vani"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.1075, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.32125, 4.32125, 4.46375),
+              "verdana"= c(1, 1, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.6075),
+              "vijaya"= c(0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 1, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.58875, 2.7325, 2.7325, 2.875),
+              "viner.hand.itc"= c(1, 1.17875, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675, 4.94625, 4.94625),
+              "vivaldi"= c(0.6425, 0.785, 0.785, 0.92875, 0.96375, 1.1075, 1.285, 1.285, 1.4825, 1.4825, 1.625, 1.7675, 1.80375, 1.80375, 1.9825, 2.1425, 2.17875, 2.32125, 2.32125, 2.46375, 2.69625, 2.69625, 2.69625, 2.83875, 3.0175, 3.0175, 3.17875, 3.17875, 3.3575),
+              "vladimir.script"= c(0.71375, 0.71375, 0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575),
+              "vrinda"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "webdings"= c(1.625, 1.80375, 2.1075, 2.25, 2.42875, 2.7325, 2.875, 3.07125, 3.3575, 3.5, 3.69625, 3.9825, 4.1425, 4.32125, 4.6075, 4.7675, 4.94625, 5.25, 5.3925, 5.57125, 5.875, 6.0175, 6.19625, 6.5, 6.6425, 6.82125, 7.125, 7.2675, 7.46375),
+              "wide.latin"= c(2.1075, 2.25, 2.7325, 2.875, 3.07125, 3.5, 3.69625, 3.83875, 4.1425, 4.46375, 4.6075, 4.94625, 5.25, 5.3925, 5.71375, 6.0175, 6.19625, 6.5, 6.82125, 6.9825, 7.2675, 7.46375, 7.75, 8.08875, 8.2325, 8.535, 8.8575, 9, 9.33875)) 
+
+
+openxlsxFontSizeLookupTableBold <- 
+  data.frame( "agency.fb"= c(0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 2.1075, 2.25, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.21375, 3.5),
+              "aharoni"= c(0.57125, 0.57125, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 2.875),
+              "algerian"= c(1, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.1425, 4.32125, 4.46375, 4.46375),
+              "andalus"= c(1, 1, 1.17875, 1.32125, 1.32125, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "angsana.new"= c(0.3925, 0.3925, 0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.25),
+              "angsanaupc"= c(0.3925, 0.3925, 0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.25),
+              "aparajita"= c(0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 1, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.58875, 2.7325, 2.7325, 2.875),
+              "arial"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825),
+              "arial.black"= c(1, 1.17875, 1.32125, 1.4825, 1.4825, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.32125, 4.32125, 4.46375, 4.6075, 4.7675, 4.94625),
+              "arial.narrow"= c(0.57125, 0.71375, 0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.07125, 3.21375, 3.21375),
+              "arial.rounded.mt.bold"= c(1, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.9825, 3.9825, 4.1425, 4.32125, 4.46375, 4.46375),
+              "arial.unicode.ms"= c(1, 1, 1.17875, 1.32125, 1.32125, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "calibri"= c(0.71375, 0.8575, 0.8575, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "calibri.light"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "californian.fb"= c(0.8575, 1, 1, 1.17875, 1.17875, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.7325, 2.875, 3.21375, 3.21375, 3.5, 3.69625, 3.69625, 3.69625, 3.83875, 4.1425, 4.1425),
+              "calisto.mt"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.42875, 2.42875, 2.58875, 2.58875, 2.7325, 2.7325, 3.07125, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "cambria"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425, 4.32125),
+              "cambria.math"= c(1, 1, 1.17875, 1.32125, 1.32125, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "candara"= c(0.71375, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875),
+              "castellar"= c(1.32125, 1.32125, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.46375, 4.7675, 4.94625, 4.94625, 5.25, 5.3925, 5.3925),
+              "centaur"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625),
+              "century"= c(1, 1, 1.17875, 1.32125, 1.32125, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "century.gothic"= c(0.8575, 0.8575, 1, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 3.9825),
+              "century.schoolbook"= c(0.8575, 0.8575, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "chiller"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5),
+              "colonna.mt"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "comic.sans.ms"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.32125, 4.32125, 4.46375),
+              "consolas"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875, 3.9825),
+              "constantia"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "cooper.black"= c(1, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.1425, 4.32125, 4.46375, 4.46375),
+              "copperplate.gothic.bold"= c(1.32125, 1.32125, 1.625, 1.625, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.32125, 4.46375, 4.46375, 4.7675, 4.7675, 4.94625, 5.25, 5.25, 5.3925),
+              "copperplate.gothic.light"= c(1.32125, 1.32125, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675, 4.94625, 4.94625, 5.25, 5.3925, 5.3925),
+              "corbel"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825),
+              "cordia.new"= c(0.3925, 0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.25, 2.42875, 2.58875, 2.58875),
+              "david"= c(0.57125, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375),
+              "dfkai-sb"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "dilleniaupc"= c(0.3925, 0.3925, 0.57125, 0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.1075),
+              "dokchampa"= c(1, 1, 1.17875, 1.32125, 1.32125, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "dotum"= c(0.8575, 0.8575, 1.32125, 1.17875, 1.17875, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.1425, 4.32125, 4.46375),
+              "dotumche"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "ebrima"= c(0.8575, 0.8575, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "edwardian.script.itc"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.3575, 3.5, 3.5),
+              "elephant"= c(1.32125, 1.4825, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.69625, 3.69625, 3.83875, 4.1425, 4.1425, 4.32125, 4.6075, 4.6075, 4.7675, 5.08875, 5.08875, 5.25, 5.57125, 5.57125, 5.71375),
+              "engravers.mt"= c(1.17875, 1.17875, 1.4825, 1.4825, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.32125, 4.32125, 4.46375, 4.6075, 4.7675, 4.94625),
+              "eras.bold.itc"= c(1.17875, 1.17875, 1.4825, 1.4825, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.46375, 4.7675, 4.7675, 4.94625),
+              "eras.demi.itc"= c(1, 1.17875, 1.32125, 1.4825, 1.4825, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425, 4.46375, 4.46375, 4.6075),
+              "eras.light.itc"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 3.9825),
+              "eras.medium.itc"= c(1, 1, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.83875, 3.83875, 3.9825, 4.1425, 4.1425, 4.32125),
+              "estrangelo.edessa"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "eucrosiaupc"= c(0.57125, 0.71375, 0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 2.875, 3.07125, 3.21375, 3.21375),
+              "euphemia"= c(1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.1425, 4.32125, 4.46375),
+              "fangsong"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "felix.titling"= c(1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.1425, 4.32125, 4.46375),
+              "fixedsys"= c(1.21375, 1.21375, 1.21375, 1.21375, 1.21375, 1.21375, 1.21375, 1.21375, 2.46375, 2.46375, 2.46375, 2.46375, 2.46375, 2.46375, 2.46375, 2.46375, 3.7325, 3.7325, 3.7325, 3.7325, 3.7325, 3.7325, 3.7325, 3.7325, 3.7325, 4.9825, 4.9825, 4.9825, 4.9825),
+              "footlight.mt.light"= c(1, 1, 1.17875, 1.32125, 1.32125, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "forte"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875, 3.9825),
+              "franklin.gothic.book"= c(1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.32125, 4.32125, 4.46375),
+              "franklin.gothic.demi"= c(1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.32125, 4.32125, 4.46375),
+              "franklin.gothic.demi.cond"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875),
+              "franklin.gothic.heavy"= c(1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.32125, 4.32125, 4.46375),
+              "franklin.gothic.medium"= c(1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.32125, 4.32125, 4.46375),
+              "franklin.gothic.medium.cond"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.83875),
+              "frankruehl"= c(0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.07125),
+              "freesiaupc"= c(0.71375, 0.71375, 0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.21375),
+              "freestyle.script"= c(0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325),
+              "french.script.mt"= c(0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325),
+              "gabriola"= c(0.71375, 0.71375, 0.8575, 0.8575, 1, 1.17875, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 2.875, 3.07125),
+              "gadugi"= c(0.8575, 0.8575, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "gautami"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 3.9825),
+              "georgia"= c(1.17875, 1.32125, 1.32125, 1.32125, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675, 4.94625, 5.08875, 5.08875),
+              "gigi"= c(1, 1, 1, 1, 1.32125, 1.4825, 1.4825, 1.80375, 1.80375, 1.80375, 1.80375, 2.1075, 2.1075, 2.1075, 2.58875, 2.58875, 2.58875, 2.875, 2.875, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.69625, 3.9825),
+              "gill.sans.mt"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875, 3.9825),
+              "gill.sans.mt.condensed"= c(0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325),
+              "gill.sans.mt.ext.condensed.bold"= c(0.57125, 0.57125, 0.71375, 0.8575, 0.8575, 1, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.1075, 2.25, 2.25, 2.25, 2.42875, 2.58875, 2.58875),
+              "gill.sans.ultra.bold"= c(1.4825, 1.625, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 3.07125, 3.21375, 3.21375, 3.5, 3.69625, 3.83875, 3.9825, 4.1425, 4.32125, 4.6075, 4.7675, 4.94625, 5.08875, 5.25, 5.3925, 5.71375, 5.875, 5.875, 6.19625, 6.3575, 6.5),
+              "gill.sans.ultra.bold.condensed"= c(1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.1425, 4.32125, 4.32125),
+              "gisha"= c(0.8575, 0.8575, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "gloucester.mt.extra.condensed"= c(0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.58875, 2.7325, 2.875, 2.875),
+              "goudy.old.style"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "goudy.stout"= c(1.4825, 1.625, 1.80375, 1.96375, 2.1075, 2.42875, 2.42875, 2.58875, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.9825, 3.9825, 4.1425, 4.46375, 4.6075, 4.7675, 4.94625, 5.08875, 5.25, 5.3925, 5.57125, 5.71375, 6.0175, 6.19625, 6.19625),
+              "gulim"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.625, 1.96375, 1.96375, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125, 4.32125),
+              "gulimche"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "gungsuh"= c(0.8575, 0.8575, 1, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.1425, 4.32125, 4.46375),
+              "gungsuhche"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "haettenschweiler"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575),
+              "harlow.solid.italic"= c(0.92875, 0.92875, 1.07125, 1.07125, 1.285, 1.42875, 1.42875, 1.58875, 1.7675, 1.7675, 1.94625, 2.1075, 2.1075, 2.285, 2.285, 2.42875, 2.42875, 2.66, 2.80375, 2.80375, 2.94625, 3.125, 3.125, 3.32125, 3.46375, 3.46375, 3.6425, 3.6425, 3.80375),
+              "harrington"= c(1, 1, 1.17875, 1.32125, 1.32125, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "high.tower.text"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "impact"= c(1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425),
+              "imprint.mt.shadow"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "informal.roman"= c(1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.83875, 3.9825),
+              "irisupc"= c(0.71375, 0.71375, 0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575),
+              "iskoola.pota"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.69625, 3.69625, 3.83875),
+              "jasmineupc"= c(0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5),
+              "jokerman"= c(1.32125, 1.32125, 1.625, 1.625, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.32125, 4.46375, 4.46375, 4.7675, 4.7675, 4.94625, 5.25, 5.25, 5.3925),
+              "juice.itc"= c(0.57125, 0.71375, 0.8575, 0.8575, 0.8575, 1, 1, 1.17875, 1.32125, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.7325),
+              "kaiti"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "kalinga"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125),
+              "kartika"= c(0.8575, 0.8575, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "khmer.ui"= c(0.8575, 0.8575, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "kodchiangupc"= c(0.3925, 0.3925, 0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.1075, 2.25, 2.25, 2.42875),
+              "kristen.itc"= c(1, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.1425, 4.32125, 4.46375, 4.46375),
+              "kunstler.script"= c(0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.58875),
+              "lao.ui"= c(0.8575, 0.8575, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "latha"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "leelawadee"= c(0.8575, 0.8575, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "levenim.mt"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425, 4.32125),
+              "lilyupc"= c(0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5),
+              "lucida.bright"= c(0.8575, 1, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075),
+              "lucida.calligraphy"= c(1.25, 1.3925, 1.58875, 1.7325, 1.7325, 2.07125, 2.1075, 2.25, 2.3925, 2.58875, 2.7325, 2.91, 3.05375, 3.05375, 3.42875, 3.42875, 3.57125, 3.7325, 3.94625, 4.08875, 4.2325, 4.3925, 4.42875, 4.75, 4.75, 4.91, 5.08875, 5.2675, 5.42875),
+              "lucida.console"= c(1, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425, 4.32125, 4.46375, 4.6075),
+              "lucida.fax"= c(1, 1.17875, 1.32125, 1.4825, 1.4825, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675, 4.7675),
+              "lucida.handwriting"= c(1.25, 1.3925, 1.58875, 1.7325, 1.7325, 2.07125, 2.25, 2.25, 2.58875, 2.58875, 2.7675, 2.91, 3.05375, 3.25, 3.42875, 3.57125, 3.57125, 3.91, 3.94625, 4.08875, 4.2325, 4.3925, 4.6075, 4.75, 4.91, 4.91, 5.2675, 5.2675, 5.42875),
+              "lucida.sans"= c(1, 1, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.6075),
+              "lucida.sans.typewriter"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.1425, 4.32125, 4.46375),
+              "lucida.sans.unicode"= c(1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125, 4.32125, 4.6075, 4.6075, 4.7675),
+              "magneto"= c(1.17875, 1.32125, 1.625, 1.625, 1.80375, 2.1075, 2.1075, 2.25, 2.58875, 2.7325, 2.7325, 3.07125, 3.21375, 3.21375, 3.5, 3.69625, 3.69625, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675, 4.94625, 5.08875, 5.25, 5.3925, 5.57125, 5.71375),
+              "maiandra.gd"= c(1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 3.9825, 4.32125, 4.32125, 4.46375),
+              "malgun.gothic"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 3.9825, 4.1425, 4.1425),
+              "mangal"= c(0.8575, 0.8575, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "marlett"= c(1.80375, 1.96375, 2.25, 2.42875, 2.58875, 2.875, 3.07125, 3.21375, 3.5, 3.69625, 3.83875, 4.1425, 4.32125, 4.46375, 4.7675, 4.94625, 5.08875, 5.3925, 5.57125, 5.71375, 6.0175, 6.19625, 6.3575, 6.6425, 6.82125, 6.9825, 7.2675, 7.46375, 7.6075),
+              "matura.mt.script.capitals"= c(1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.9825, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675, 4.94625, 4.94625),
+              "meiryo"= c(1, 1.17875, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.46375, 4.7675, 4.7675, 4.94625),
+              "meiryo.ui"= c(1, 1.17875, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.46375, 4.7675, 4.7675, 4.94625),
+              "microsoft.himalaya"= c(0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.42875),
+              "microsoft.jhenghei"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125, 4.32125),
+              "microsoft.jhenghei.ui"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125, 4.32125),
+              "microsoft.new.tai.lue"= c(0.8575, 0.8575, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "microsoft.phagspa"= c(0.8575, 0.8575, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "microsoft.sans.serif"= c(1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "microsoft.tai.le"= c(0.8575, 0.8575, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "microsoft.uighur"= c(0.57125, 0.57125, 0.71375, 0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.58875, 2.58875),
+              "microsoft.yahei"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.1075, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.9825, 3.9825, 4.1425, 4.32125, 4.46375, 4.46375),
+              "microsoft.yahei.ui"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.1075, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.9825, 3.9825, 4.1425, 4.32125, 4.46375, 4.46375),
+              "microsoft.yi.baiti"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875),
+              "miriam"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5),
+              "miriam.fixed"= c(1, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.1425, 4.32125, 4.46375, 4.46375),
+              "mistral"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575),
+              "modern"= c(0.75, 0.75, 0.8925, 1.035, 1.035, 1.21375, 1.3575, 1.3575, 1.5175, 1.5175, 1.66, 1.83875, 1.83875, 2, 2.1425, 2.1425, 2.285, 2.46375, 2.46375, 2.625, 2.7675, 2.7675, 2.91, 2.91, 3.1075, 3.1075, 3.25, 3.3925, 3.3925),
+              "modern.no..20"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575),
+              "mongolian.baiti"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "monotype.corsiva"= c(0.785, 0.92875, 1.07125, 1.07125, 1.1075, 1.285, 1.42875, 1.42875, 1.625, 1.7675, 1.7675, 1.9825, 1.9825, 2.1425, 2.285, 2.32125, 2.46375, 2.46375, 2.66, 2.66, 2.83875, 2.9825, 2.9825, 3.125, 3.17875, 3.3575, 3.5, 3.5, 3.67875),
+              "moolboran"= c(0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.58875),
+              "ms.gothic"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "ms.mincho"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "ms.outlook"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "ms.pgothic"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "ms.pmincho"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "ms.reference.sans.serif"= c(1.17875, 1.17875, 1.4825, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675, 4.7675),
+              "ms.reference.specialty"= c(2.1075, 2.42875, 2.7325, 2.875, 3.07125, 3.5, 3.69625, 3.83875, 4.32125, 4.46375, 4.6075, 4.94625, 5.25, 5.3925, 5.71375, 5.875, 6.19625, 6.5, 6.6425, 6.82125, 7.2675, 7.46375, 7.6075, 8.08875, 8.2325, 8.375, 8.71375, 9, 9.16),
+              "ms.sans.serif"= c(0.8925, 1.035, 1.035, 1.3575, 1.3575, 1.5175, 1.5175, 1.5175, 1.83875, 2, 2, 2.1425, 2.1425, 2.1425, 2.7675, 2.7675, 2.7675, 2.7675, 3.1075, 3.1075, 3.25, 3.25, 3.25, 3.25, 3.7325, 3.7325, 3.7325, 4.0175, 4.0175),
+              "ms.serif"= c(0.75, 0.8925, 0.8925, 1.21375, 1.21375, 1.3575, 1.3575, 1.3575, 1.5175, 1.83875, 1.83875, 2.285, 2.285, 2.285, 2.46375, 2.46375, 2.46375, 2.46375, 2.7675, 2.7675, 2.7675, 3.875, 3.875, 3.875, 3.1075, 3.875, 3.875, 3.7325, 3.7325),
+              "ms.ui.gothic"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "mt.extra"= c(1.80375, 1.96375, 2.25, 2.42875, 2.58875, 2.875, 3.07125, 3.21375, 3.5, 3.69625, 3.83875, 4.32125, 4.46375, 4.6075, 4.94625, 5.08875, 5.25, 5.57125, 5.71375, 5.875, 6.19625, 6.3575, 6.5, 6.82125, 6.9825, 7.125, 7.46375, 7.6075, 7.75),
+              "mv.boli"= c(1.17875, 1.32125, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.3575, 3.3575, 3.5, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675, 4.94625, 5.08875, 5.25, 5.25),
+              "narkisim"= c(0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.07125),
+              "niagara.engraved"= c(0.57125, 0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.17875, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.4825, 1.4825, 1.625, 1.625, 1.625, 1.80375, 1.80375, 1.80375, 1.96375, 1.96375, 1.96375, 2.1075, 2.1075),
+              "niagara.solid"= c(0.57125, 0.57125, 0.71375, 0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.17875, 1.17875, 1.17875, 1.32125, 1.32125, 1.32125, 1.4825, 1.4825, 1.4825, 1.625, 1.625, 1.625, 1.80375, 1.80375, 1.80375, 1.96375, 1.96375, 1.96375, 2.1075, 2.1075),
+              "nirmala.ui"= c(0.8575, 0.8575, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "nsimsun"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "nyala"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "ocr.a.extended"= c(1, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425, 4.32125, 4.46375, 4.6075),
+              "old.english.text.mt"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "onyx"= c(0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 0.8575, 1, 1, 1.17875, 1.17875, 1.17875, 1.17875, 1.17875, 1.32125, 1.32125, 1.32125, 1.4825, 1.4825, 1.4825, 1.4825, 1.625, 1.625, 1.625, 1.96375, 1.96375, 1.96375, 2.1075, 2.1075, 2.1075),
+              "palace.script.mt"= c(0.6075, 0.6075, 0.785, 0.785, 0.785, 0.92875, 0.92875, 1.07125, 1.1075, 1.285, 1.285, 1.285, 1.42875, 1.4825, 1.625, 1.625, 1.625, 1.7675, 1.80375, 1.9825, 1.9825, 2.1425, 2.1425, 2.1425, 2.32125, 2.32125, 2.46375, 2.46375, 2.46375),
+              "palatino.linotype"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "papyrus"= c(1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.21375, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.32125, 4.32125, 4.46375),
+              "parchment"= c(0.3925, 0.3925, 0.3925, 0.3925, 0.57125, 0.57125, 0.57125, 0.57125, 0.71375, 0.71375, 0.71375, 0.8575, 0.8575, 0.8575, 1, 1, 1, 1, 1.17875, 1.17875, 1.17875, 1.17875, 1.32125, 1.32125, 1.32125, 1.32125, 1.4825, 1.4825, 1.4825),
+              "perpetua"= c(0.71375, 0.71375, 0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.21375),
+              "perpetua.titling.mt"= c(1, 1.17875, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675, 4.94625, 4.94625),
+              "plantagenet.cherokee"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875),
+              "playbill"= c(0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.58875, 2.58875),
+              "pmingliu"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5),
+              "pmingliu-extb"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5),
+              "poor.richard"= c(1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 3.9825, 4.1425),
+              "pristina"= c(0.71375, 1, 1.17875, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "raavi"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "rage.italic"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875),
+              "rockwell"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875, 3.9825),
+              "rockwell.condensed"= c(0.57125, 0.71375, 0.71375, 0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 2.875, 3.07125),
+              "rockwell.extra.bold"= c(1, 1.17875, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.42875, 2.42875, 2.7325, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.9825, 4.1425, 4.1425, 4.46375, 4.46375, 4.6075, 4.7675, 4.94625, 5.08875),
+              "rod"= c(1, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.1425, 4.32125, 4.46375, 4.46375),
+              "roman"= c(0.75, 0.75, 0.8925, 1.035, 1.035, 1.21375, 1.3575, 1.3575, 1.5175, 1.5175, 1.66, 1.83875, 1.83875, 2, 2.1425, 2.1425, 2.285, 2.46375, 2.46375, 2.625, 2.7675, 2.7675, 2.91, 2.91, 3.1075, 3.1075, 3.25, 3.3925, 3.3925),
+              "sakkal.majalla"= c(0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.58875, 2.7325, 2.7325, 2.875),
+              "script"= c(0.6075, 0.6075, 0.75, 0.75, 0.8925, 1.035, 1.035, 1.035, 1.21375, 1.3575, 1.3575, 1.5175, 1.5175, 1.66, 1.83875, 1.83875, 1.83875, 2, 2.1425, 2.1425, 2.285, 2.285, 2.46375, 2.46375, 2.625, 2.625, 2.7675, 2.7675, 2.91),
+              "script.mt.bold"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "segoe.print"= c(1.17875, 1.17875, 1.4825, 1.625, 1.625, 1.96375, 2.1075, 2.1075, 2.42875, 2.42875, 2.58875, 2.875, 2.875, 3.07125, 3.3575, 3.3575, 3.5, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675, 4.94625, 5.08875, 5.25, 5.3925),
+              "segoe.script"= c(1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.96375, 2.1075, 2.1075, 2.42875, 2.58875, 2.58875, 2.875, 2.875, 3.07125, 3.3575, 3.3575, 3.5, 3.83875, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675, 4.94625, 5.08875, 5.25, 5.3925),
+              "segoe.ui"= c(0.8575, 0.8575, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425),
+              "segoe.ui.light"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.83875),
+              "segoe.ui.semibold"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625, 3.83875, 3.9825, 3.9825),
+              "segoe.ui.semilight"= c(1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 3.9825, 4.1425),
+              "segoe.ui.symbol"= c(0.8575, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 3.9825),
+              "shonar.bangla"= c(0.71375, 0.71375, 0.8575, 0.8575, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.58875, 2.7325, 2.7325, 2.875, 2.875),
+              "showcard.gothic"= c(1.17875, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.32125, 4.32125, 4.46375),
+              "shruti"= c(0.71375, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.83875),
+              "simhei"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "simplified.arabic"= c(0.8575, 0.8575, 1, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425),
+              "simplified.arabic.fixed"= c(1, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 3.9825, 4.1425, 4.32125, 4.46375, 4.46375),
+              "simsun"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "simsun-extb"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "small.fonts"= c(0.8925, 0.8925, 1.21375, 1.5175, 1.5175, 1.5175, 1.83875, 1.83875, 1.83875, 2.285, 2.285, 2.285, 2.46375, 2.46375, 2.7675, 3.1075, 2.7675, 2.7675, 3.1075, 3.1075, 3.1075, 3.7325, 3.7325, 3.7325, 3.7325, 3.875, 3.875, 3.875, 3.875),
+              "snap.itc"= c(1.4825, 1.625, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675, 4.94625, 5.25, 5.3925, 5.57125, 5.71375, 5.875, 6.0175, 6.3575, 6.5, 6.5),
+              "sylfaen"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "symbol"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "tahoma"= c(1, 1, 1.32125, 1.32125, 1.4825, 1.625, 1.80375, 1.80375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.58875, 2.875, 2.875, 3.07125, 3.21375, 3.3575, 3.5, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.6075),
+              "tempus.sans.itc"= c(1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.5, 3.69625, 3.83875, 3.9825, 4.1425, 4.1425, 4.46375, 4.46375, 4.6075, 4.7675, 4.94625, 5.08875),
+              "terminal"= c(1.21375, 1.21375, 1.21375, 1.83875, 1.83875, 1.5175, 1.5175, 1.5175, 1.5175, 2.58875, 2.58875, 2.58875, 2.58875, 2.58875, 3.7325, 3.7325, 3.7325, 3.7325, 3.1075, 3.1075, 3.1075, 4.46375, 4.46375, 4.46375, 4.46375, 4.46375, 5.6075, 5.6075, 5.6075),
+              "times.new.roman"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "traditional.arabic"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "trebuchet.ms"= c(0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.83875, 3.83875, 4.1425, 4.1425, 4.32125),
+              "tunga"= c(0.71375, 0.71375, 0.8575, 1, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575),
+              "tw.cen.mt"= c(0.71375, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625, 3.83875),
+              "tw.cen.mt.condensed"= c(0.57125, 0.71375, 0.8575, 0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.07125),
+              "tw.cen.mt.condensed.extra.bold"= c(0.8575, 0.8575, 1, 1.17875, 1.17875, 1.32125, 1.4825, 1.4825, 1.625, 1.80375, 1.80375, 1.96375, 2.1075, 2.1075, 2.25, 2.42875, 2.42875, 2.58875, 2.7325, 2.7325, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5, 3.69625, 3.69625),
+              "utsaah"= c(0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 1, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.7325, 2.875),
+              "vani"= c(1, 1.17875, 1.4825, 1.4825, 1.625, 1.80375, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 2.875, 3.21375, 3.21375, 3.3575, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675, 4.94625, 5.08875, 5.08875),
+              "verdana"= c(1.17875, 1.17875, 1.4825, 1.4825, 1.625, 1.96375, 1.96375, 2.1075, 2.25, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.69625, 3.83875, 3.83875, 4.1425, 4.1425, 4.32125, 4.6075, 4.6075, 4.7675, 4.94625, 5.08875, 5.25),
+              "vijaya"= c(0.57125, 0.57125, 0.71375, 0.71375, 0.8575, 1, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.4825, 1.625, 1.625, 1.80375, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.42875, 2.58875, 2.58875, 2.7325, 2.7325, 2.875),
+              "viner.hand.itc"= c(1.17875, 1.32125, 1.4825, 1.625, 1.80375, 1.96375, 2.1075, 2.1075, 2.42875, 2.42875, 2.58875, 2.7325, 2.875, 3.07125, 3.21375, 3.3575, 3.3575, 3.69625, 3.69625, 3.83875, 3.9825, 4.1425, 4.32125, 4.46375, 4.6075, 4.7675, 4.94625, 5.08875, 5.08875),
+              "vivaldi"= c(0.785, 0.92875, 0.92875, 1.07125, 1.1075, 1.285, 1.42875, 1.42875, 1.625, 1.625, 1.7675, 1.94625, 1.9825, 1.9825, 2.1425, 2.285, 2.32125, 2.46375, 2.46375, 2.66, 2.83875, 2.83875, 2.83875, 2.9825, 3.17875, 3.17875, 3.3575, 3.3575, 3.5),
+              "vladimir.script"= c(0.8575, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.07125, 3.21375, 3.3575, 3.3575, 3.5),
+              "vrinda"= c(0.71375, 0.8575, 1, 1, 1.17875, 1.32125, 1.32125, 1.4825, 1.625, 1.625, 1.80375, 1.96375, 1.96375, 2.1075, 2.25, 2.25, 2.42875, 2.58875, 2.58875, 2.7325, 2.875, 2.875, 3.07125, 3.21375, 3.21375, 3.3575, 3.5, 3.5, 3.69625),
+              "webdings"= c(1.80375, 1.96375, 2.25, 2.42875, 2.58875, 2.875, 3.07125, 3.21375, 3.5, 3.69625, 3.83875, 4.1425, 4.32125, 4.46375, 4.7675, 4.94625, 5.08875, 5.3925, 5.57125, 5.71375, 6.0175, 6.19625, 6.3575, 6.6425, 6.82125, 6.9825, 7.2675, 7.46375, 7.6075),
+              "wide.latin"= c(2.25, 2.42875, 2.875, 3.07125, 3.21375, 3.69625, 3.83875, 3.9825, 4.32125, 4.6075, 4.7675, 5.08875, 5.3925, 5.57125, 5.875, 6.19625, 6.3575, 6.6425, 6.9825, 7.125, 7.46375, 7.6075, 7.8925, 8.2325, 8.375, 8.71375, 9, 9.16, 9.4825))
 
 

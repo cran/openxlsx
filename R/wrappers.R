@@ -200,6 +200,24 @@ sheets <- function(wb){
 #' @param wb A Workbook object to attach the new worksheet
 #' @param sheetName A name for the new worksheet
 #' @param gridLines A logical. If FALSE, the worksheet grid lines will be hidden.
+#' @param tabColour Colour of the worksheet tab. A valid colour (belonging to colours()) or a valid hex colour beginning with "#"
+#' @param zoom A numeric. Worksheet zoom level.
+#' @param header document header. Character vector of length 3 corresponding to positons left, center, right. Use NA to skip a positon.
+#' @param footer document footer. Character vector of length 3 corresponding to positons left, center, right. Use NA to skip a positon.
+#' @param evenHeader document header for even pages.
+#' @param evenFooter document footer for even pages.
+#' @param firstHeader document header for first page only.
+#' @param firstFooter document footer for first page only.
+#' @details Headers and footers can contain special tags
+#' \itemize{
+#'   \item{\bold{&[Page]}}{ Page number}
+#'   \item{\bold{&[Pages]}}{ Number of pages}
+#'   \item{\bold{&[Date]}}{ Current date}
+#'   \item{\bold{&[Time]}}{ Current time}
+#'   \item{\bold{&[Path]}}{ File path}
+#'   \item{\bold{&[File]}}{ File name}
+#'   \item{\bold{&[Tab]}}{ Worksheet name}
+#' }
 #' @return XML tree
 #' @export
 #' @examples
@@ -207,13 +225,52 @@ sheets <- function(wb){
 #' wb <- createWorkbook("Fred")
 #' 
 #' ## Add 3 worksheets
-#' addWorksheet(wb, "Worksheet Name")
-#' addWorksheet(wb, "This is worksheet 2")
-#' addWorksheet(wb, "The third worksheet")
+#' addWorksheet(wb, "Sheet 1")
+#' addWorksheet(wb, "Sheet 2", gridLines = FALSE)
+#' addWorksheet(wb, "Sheet 3", tabColour = "red")
+#' addWorksheet(wb, "Sheet 4", gridLines = FALSE, tabColour = "#4F81BD")
+#' 
+#' ## Headers and Footers
+#' addWorksheet(wb, "Sheet 5",
+#' header = c("ODD HEAD LEFT", "ODD HEAD CENTER", "ODD HEAD RIGHT"),
+#' footer = c("ODD FOOT RIGHT", "ODD FOOT CENTER", "ODD FOOT RIGHT"),
+#' evenHeader = c("EVEN HEAD LEFT", "EVEN HEAD CENTER", "EVEN HEAD RIGHT"),
+#' evenFooter = c("EVEN FOOT RIGHT", "EVEN FOOT CENTER", "EVEN FOOT RIGHT"),
+#' firstHeader = c("TOP", "OF FIRST", "PAGE"),
+#' firstFooter = c("BOTTOM", "OF FIRST", "PAGE"))
+#' 
+#' addWorksheet(wb, "Sheet 6",
+#'              header = c("&[Date]", "ALL HEAD CENTER 2", "&[Page] / &[Pages]"),
+#'              footer = c("&[Path]&[File]", NA, "&[Tab]"),
+#'              firstHeader = c(NA, "Center Header of First Page", NA),
+#'              firstFooter = c(NA, "Center Footer of First Page", NA))
+#' 
+#' addWorksheet(wb, "Sheet 7",
+#'              header = c("ALL HEAD LEFT 2", "ALL HEAD CENTER 2", "ALL HEAD RIGHT 2"),
+#'              footer = c("ALL FOOT RIGHT 2", "ALL FOOT CENTER 2", "ALL FOOT RIGHT 2"))
+#' 
+#' addWorksheet(wb, "Sheet 8",
+#'              firstHeader = c("FIRST ONLY L", NA, "FIRST ONLY R"),
+#'              firstFooter = c("FIRST ONLY L", NA, "FIRST ONLY R"))
+#' 
+#' ## Need data on worksheet to see all headers and footers
+#' writeData(wb, sheet = 5, 1:400)
+#' writeData(wb, sheet = 6, 1:400)
+#' writeData(wb, sheet = 7, 1:400)
+#' writeData(wb, sheet = 8, 1:400)
 #' 
 #' ## Save workbook
 #' saveWorkbook(wb, "addWorksheetExample.xlsx", overwrite = TRUE)
-addWorksheet <- function(wb, sheetName, gridLines = TRUE){
+addWorksheet <- function(wb, sheetName,
+                         gridLines = TRUE,
+                         tabColour = NULL,
+                         zoom = 100,
+                         header = NULL,
+                         footer = NULL,
+                         evenHeader = NULL,
+                         evenFooter = NULL,
+                         firstHeader = NULL,
+                         firstFooter = NULL){
   
   if(!"Workbook" %in% class(wb))
     stop("First argument must be a Workbook.")
@@ -227,15 +284,47 @@ addWorksheet <- function(wb, sheetName, gridLines = TRUE){
   if(nchar(sheetName) > 31)
     stop("sheetName too long! Max length is 31 characters.")
   
-  nSheets <- length(wb$worksheets)
+  if(!is.null(tabColour))
+    tabColour <- validateColour(tabColour, "Invalid tabColour in addWorksheet.")
+  
+  if(!is.numeric(zoom))
+    stop("zoom must be numeric")
+  
   
   if(!is.character(sheetName))
     sheetName <- as.character(sheetName)
   
+  if(!is.null(header) & length(header) != 3)
+    stop("header must have length 3 where elements correspond to positions: left, center, right.")
+  
+  if(!is.null(footer) & length(footer) != 3)
+    stop("footer must have length 3 where elements correspond to positions: left, center, right.")
+  
+  if(!is.null(evenHeader) & length(evenHeader) != 3)
+    stop("evenHeader must have length 3 where elements correspond to positions: left, center, right.")
+  
+  if(!is.null(evenFooter) & length(evenFooter) != 3)
+    stop("evenFooter must have length 3 where elements correspond to positions: left, center, right.")
+  
+  if(!is.null(firstHeader) & length(firstHeader) != 3)
+    stop("firstHeader must have length 3 where elements correspond to positions: left, center, right.")
+  
+  if(!is.null(firstFooter) & length(firstFooter) != 3)
+    stop("firstFooter must have length 3 where elements correspond to positions: left, center, right.")
+  
   ## Invalid XML characters
   sheetName <- replaceIllegalCharacters(sheetName)
   
-  invisible(wb$addWorksheet(sheetName, gridLines))
+  invisible(wb$addWorksheet(sheetName = sheetName, 
+                            showGridLines = gridLines,
+                            tabColour = tabColour,
+                            zoom = zoom[1],
+                            oddHeader = headerFooterSub(header),
+                            oddFooter = headerFooterSub(footer),
+                            evenHeader = headerFooterSub(evenHeader),
+                            evenFooter = headerFooterSub(evenFooter),
+                            firstHeader = headerFooterSub(firstHeader),
+                            firstFooter = headerFooterSub(firstFooter)))
 } 
 
 
@@ -334,10 +423,13 @@ convertFromExcelRef <- function(col){
 #'   \item{\bold{PERCENTAGE}}
 #'   \item{\bold{FRACTION}}
 #'   \item{\bold{SCIENTIFIC}}
+#'   \item{\bold{COMMA}{  for comma seperated thousands}}
+#'   \item{For date/datetime styling a combination of d, m, y and punctuation marks}
+#'   \item{For numeric rouding use "0.00" with the preferred number of deciaml places}
 #' }
 #' 
 #' @param border Cell border 
-#' (Any combination of "Top", "Bottom", "Left", "Right").
+#' (Any combination of "Top", "Bottom", "Left", "Right" in any order).
 #' \itemize{
 #'    \item{\bold{Top}}{ Top border}
 #'    \item{\bold{Bottom}}{ Bottom border}
@@ -402,6 +494,7 @@ convertFromExcelRef <- function(col){
 #'   } 
 #'   
 #' @param wrapText Logical. If TRUE cell contents will wrap to fit in column.  
+#' @param textRotation Rotation of text in degrees. Numeric in [0, 180].
 #' @return A style object
 #' @export
 #' @examples
@@ -436,19 +529,20 @@ createStyle <- function(fontName = NULL,
                         borderStyle =  getOption("openxlsx.borderStyle", "thin"),
                         bgFill = NULL, fgFill = NULL,
                         halign = NULL, valign = NULL, 
-                        textDecoration = NULL, wrapText = FALSE){
+                        textDecoration = NULL, wrapText = FALSE,
+                        textRotation = NULL){
   
   ### Error checking
   
   ## if num fmt is made up of dd, mm, yy
   
   numFmt <- tolower(numFmt[[1]])
-  validNumFmt <- c("general", "number", "currency", "accounting", "date", "longdate", "time", "percentage", "scientific", "text", "3", "4")
+  validNumFmt <- c("general", "number", "currency", "accounting", "date", "longdate", "time", "percentage", "scientific", "text", "3", "4", "comma")
   
   if(numFmt == "date"){
     numFmt <- getOption("openxlsx.dateFormat", getOption("openxlsx.dateformat", "date"))
   }else if(!numFmt %in% validNumFmt){
-    if(grepl("[^mdyhsap[[:punct:] ]", numFmt))
+    if(grepl("[^mdyhsap[[:punct:] 0\\.#\\$\\*]", numFmt))
       stop("Invalid numFmt")
   }
   
@@ -469,7 +563,10 @@ createStyle <- function(fontName = NULL,
                         list("numFmtId" = 49),
                         
                         list("numFmtId" = 3),
-                        list("numFmtId" = 4))
+                        list("numFmtId" = 4),
+                        list("numFmtId" = 3))
+  
+  names(numFmtMapping) <- validNumFmt
   
   ## Validate border line style
   if(!is.null(borderStyle))
@@ -503,7 +600,6 @@ createStyle <- function(fontName = NULL,
   
   if(!is.null(fontSize))
     if(fontSize < 1) stop("Font size must be greater than 0!")
-  
   
   
   ######################### error checking complete #############################
@@ -581,8 +677,14 @@ createStyle <- function(fontName = NULL,
   style$valign <- valign
   style$wrapText <- wrapText[[1]]
   
+  if(!is.null(textRotation)){
+    if(!is.numeric(textRotation))
+      stop("textRotation must be numeric.")
+    style$textRotation <- round(textRotation[[1]], 0)
+  }
+  
   if(numFmt %in% validNumFmt){
-    style$numFmt <- numFmtMapping[[which(validNumFmt == numFmt[[1]])]]
+    style$numFmt <- numFmtMapping[[numFmt[[1]]]]
   }else{
     style$numFmt <- list("numFmtId" = 9999, formatCode = numFmt)  ## Custom numFmt
   }
@@ -631,7 +733,7 @@ createStyle <- function(fontName = NULL,
 #' saveWorkbook(wb, "addStyleExample.xlsx", overwrite = TRUE)
 addStyle <- function(wb, sheet, style, rows, cols, gridExpand = FALSE){
   
-  sheet = wb$validateSheet(sheet)
+  sheet <- wb$validateSheet(sheet)
   
   if(!"Workbook" %in% class(wb))
     stop("First argument must be a Workbook.")
@@ -644,9 +746,9 @@ addStyle <- function(wb, sheet, style, rows, cols, gridExpand = FALSE){
   
   ## rows and cols need to be the same length
   if(gridExpand){
-    combs <- expand.grid(rows, cols) 
-    rows <- combs[,1]
-    cols <- combs[,2]
+    combs <- expand.grid(cols, rows) 
+    cols <- combs[,1]
+    rows <- combs[,2]
   }
   
   if(length(rows) != length(cols)){
@@ -681,12 +783,11 @@ getCellRefs <- function(cellCoords){
 #' @param sheet A name or index of a worksheet
 #' @param cols Columns to apply conditional formatting to
 #' @param rows Rows to apply conditional formatting to
-#' @param rule The condition under which to apply the formatting or a vector of colours 
-#' if type = "colourScale". See examples.
+#' @param rule The condition under which to apply the formatting or a vector of colours. See examples.
 #' @param style A style to apply to those cells that satisify the rule. A Style object returned from createStyle()
 #' @details Valid operators are "<", "<=", ">", ">=", "==", "!=". See Examples.
 #' Default style given by: createStyle(fontColour = "#9C0006", bgFill = "#FFC7CE")
-#' @param type Either 'expression' or 'colorscale'. If 'expression' the formatting is determined
+#' @param type Either 'expression', 'colorscale' or 'databar'. If 'expression' the formatting is determined
 #' by a formula.  If colorScale cells are coloured based on cell value. See examples.
 #' @seealso \code{\link{createStyle}}
 #' @export
@@ -697,6 +798,7 @@ getCellRefs <- function(cellCoords){
 #' addWorksheet(wb, "moving Col")
 #' addWorksheet(wb, "Dependent on 1")
 #' addWorksheet(wb, "colourScale 2 Colours")
+#' addWorksheet(wb, "databar")
 #' 
 #' negStyle <- createStyle(fontColour = "#9C0006", bgFill = "#FFC7CE")
 #' posStyle <- createStyle(fontColour = "#006100", bgFill = "#C6EFCE")
@@ -738,17 +840,30 @@ getCellRefs <- function(cellCoords){
 #' setColWidths(wb, 5, cols=1:ncol(df), widths=1.07)
 #' setRowHeights(wb, 5, rows=1:nrow(df), heights=7.5) 
 #'
+#' ## Databars
+#' writeData(wb, "databar", -5:5)
+#' conditionalFormat(wb, "databar", cols = 1, rows = 1:12, type = "databar") ## Default colours
+#' 
+#' writeData(wb, "databar", -5:5, startCol = 2)
+#' ## set negative and positive colours
+#' conditionalFormat(wb, "databar", cols = 2, rows = 1:12,
+#'  rule = c("yellow", "green"), type = "databar")
+#' 
 #' ## Save workbook
 #' saveWorkbook(wb, "conditionalFormatExample.xlsx", overwrite = TRUE)
-conditionalFormat <- function(wb, sheet, cols, rows, rule, style = NULL, type = "expression"){
+conditionalFormat <- function(wb, sheet, cols, rows, rule = NULL, style = NULL, type = "expression"){
   
   
   ## Rule always applies to top left of sqref, $ determine which cells the rule depends on
+  ## Rule for "databar" and colourscale are colours of length 2/3 or 1 respectively.
+  
   type <- tolower(type)
   if(tolower(type) %in% c("colorscale", "colourscale")){
     type <- "colorScale"
+  }else if(type == "databar"){
+    type <- "dataBar"
   }else if(type != "expression"){
-    stop("Invalid type argument.  type must be 'expression' or 'colourScale'")
+    stop("Invalid type argument.  Type must be 'expression', 'colourScale' or 'databar'")
   }
   
   ## rows and cols
@@ -762,6 +877,17 @@ conditionalFormat <- function(wb, sheet, cols, rows, rule, style = NULL, type = 
       stop("rule must be a vector containing 2 or 3 colours if type is 'colorScale'")
     
     rule <- validateColour(rule, errorMsg="Invalid colour specified in rule.")
+    dxfId <- NULL
+    
+  }else if(type == "dataBar"){
+    
+    ## If rule is NULL use default colour
+    if(is.null(rule)){
+      rule <- "FF638EC6"
+    }else{
+      rule <- validateColour(rule, errorMsg="Invalid colour specified in rule.")
+    }
+    
     dxfId <- NULL
     
   }else{ ## else type == "expression"
@@ -930,8 +1056,8 @@ insertImage <- function(wb, sheet, file, width = 6, height = 3, startRow = 1, st
   }
   
   ## Convert to EMUs
-  widthEMU <- width * 914400 #(EMUs per inch)
-  heightEMU <- height * 914400 #(EMUs per inch)
+  widthEMU <- as.integer(round(width * 914400L, 0)) #(EMUs per inch)
+  heightEMU <- as.integer(round(height * 914400L, 0)) #(EMUs per inch)
   
   wb$insertImage(sheet, file = file, startRow = startRow, startCol = startCol, width = widthEMU, height = heightEMU)
   
@@ -997,11 +1123,21 @@ setRowHeights <- function(wb, sheet, rows, heights){
 
 #' @name setColWidths
 #' @title Set worksheet column widths
+#' @description Set worksheet column widths to specific width or "auto".
 #' @author Alexander Walker
 #' @param wb A workbook object
 #' @param sheet A name or index of a worksheet
 #' @param cols Indices of cols to set width
-#' @param widths widths to set rows to specified in Excel column width units.
+#' @param widths widths to set rows to specified in Excel column width units or "auto" for automatic sizing. The widths argument is
+#' recycled to the length of cols.
+#' @details The global min and max column width for "auto" columns is set by (default values show):
+#' \itemize{
+#'   \item{options("openxlsx.minWidth" = 3)}
+#'   \item{options("openxlsx.maxWidth" = 250)} ## This is the maximum width allowed in Excel
+#' }
+#' 
+#' NOTE: The calculation of column widths can be slow for large worksheets.
+#' 
 #' @seealso \code{\link{removeColWidths}}
 #' @export
 #' @examples
@@ -1011,9 +1147,15 @@ setRowHeights <- function(wb, sheet, rows, heights){
 #' ## Add a worksheet
 #' addWorksheet(wb, "Sheet 1") 
 #'
+#'
 #' ## set col widths
 #' setColWidths(wb, 1, cols = c(1,4,6,7,9), widths = c(16,15,12,18,33))
-#' 
+#'
+#' ## auto columns
+#' addWorksheet(wb, "Sheet 2")
+#' writeData(wb, sheet = 2, x = iris)
+#' setColWidths(wb, sheet = 2, cols = 1:5, widths = "auto")
+#'   
 #' ## Save workbook
 #' saveWorkbook(wb, "setColWidthsExample.xlsx", overwrite = TRUE)
 setColWidths <- function(wb, sheet, cols, widths){
@@ -1105,18 +1247,6 @@ removeRowHeights <- function(wb, sheet, rows){
   if(length(removeInds) > 0)
     wb$rowHeights[[sheet]] <- wb$rowHeights[[sheet]][-removeInds]
   
-}
-
-
-
-
-#' @name orderCellRef
-#' @title Returns ordering of sorted cell references 
-#' @param x vector of cell references
-#' @return Ordering of sorted cell references 
-#' @export
-orderCellRef <- function(x){
-  order(nchar(x), x) - 1L
 }
 
 
@@ -1419,87 +1549,127 @@ getBaseFont <- function(wb){
 }
 
 
-#' @name setHeader
-#' @title Set header for all worksheets
+#' @name setHeaderFooter
+#' @title Set document headers and footers
 #' @author Alexander Walker
 #' @param wb A workbook object
-#' @param text header text. A character vector of length 1.
-#' @param position Postion of text in header. One of "left", "center" or "right"
+#' @param sheet A name or index of a worksheet
+#' @param header document header. Character vector of length 3 corresponding to positons left, center, right. Use NA to skip a positon.
+#' @param footer document footer. Character vector of length 3 corresponding to positons left, center, right. Use NA to skip a positon.
+#' @param evenHeader document header for even pages.
+#' @param evenFooter document footer for even pages.
+#' @param firstHeader document header for first page only.
+#' @param firstFooter document footer for first page only.
+#' @details Headers and footers can contain special tags
+#' \itemize{
+#'   \item{\bold{&[Page]}}{ Page number}
+#'   \item{\bold{&[Pages]}}{ Number of pages}
+#'   \item{\bold{&[Date]}}{ Current date}
+#'   \item{\bold{&[Time]}}{ Current time}
+#'   \item{\bold{&[Path]}}{ File path}
+#'   \item{\bold{&[File]}}{ File name}
+#'   \item{\bold{&[Tab]}}{ Worksheet name}
+#' }
 #' @export
+#' @seealso \code{\link{addWorksheet}} to set headers and footers when adding a worksheet
 #' @examples
-#' wb <- createWorkbook("Edgar Anderson")
+#' wb <- createWorkbook()
+#' 
 #' addWorksheet(wb, "S1")
-#' writeDataTable(wb, "S1", x = iris[1:30,], xy = c("C", 5))
+#' addWorksheet(wb, "S2")
+#' addWorksheet(wb, "S3")
+#' addWorksheet(wb, "S4")
 #' 
-#' ## set all headers
-#' setHeader(wb, "This is a header", position="center")
-#' setHeader(wb, "To the left", position="left")
-#' setHeader(wb, "On the right", position="right")
+#' writeData(wb, 1, 1:400)
+#' writeData(wb, 2, 1:400)
+#' writeData(wb, 3, 3:400)
+#' writeData(wb, 4, 3:400)
 #' 
-#' ## set all footers
-#' setFooter(wb, "Center Footer Here", position="center")
-#' setFooter(wb, "Bottom left", position="left")
-#' setFooter(wb, Sys.Date(), position="right")
+#' setHeaderFooter(wb, sheet = "S1",  
+#'                 header = c("ODD HEAD LEFT", "ODD HEAD CENTER", "ODD HEAD RIGHT"),
+#'                 footer = c("ODD FOOT RIGHT", "ODD FOOT CENTER", "ODD FOOT RIGHT"),
+#'                 evenHeader = c("EVEN HEAD LEFT", "EVEN HEAD CENTER", "EVEN HEAD RIGHT"),
+#'                 evenFooter = c("EVEN FOOT RIGHT", "EVEN FOOT CENTER", "EVEN FOOT RIGHT"),
+#'                 firstHeader = c("TOP", "OF FIRST", "PAGE"),
+#'                 firstFooter = c("BOTTOM", "OF FIRST", "PAGE"))
 #' 
-#' saveWorkbook(wb, "headerFooterExample.xlsx", overwrite = TRUE)
-setHeader <- function(wb, text, position = "center"){
+#' setHeaderFooter(wb, sheet = 2,  
+#'                 header = c("&[Date]", "ALL HEAD CENTER 2", "&[Page] / &[Pages]"),
+#'                 footer = c("&[Path]&[File]", NA, "&[Tab]"),
+#'                 firstHeader = c(NA, "Center Header of First Page", NA),
+#'                 firstFooter = c(NA, "Center Footer of First Page", NA))
+#' 
+#' setHeaderFooter(wb, sheet = 3,  
+#'                 header = c("ALL HEAD LEFT 2", "ALL HEAD CENTER 2", "ALL HEAD RIGHT 2"),
+#'                 footer = c("ALL FOOT RIGHT 2", "ALL FOOT CENTER 2", "ALL FOOT RIGHT 2"))
+#' 
+#' setHeaderFooter(wb, sheet = 4,  
+#'                 firstHeader = c("FIRST ONLY L", NA, "FIRST ONLY R"),
+#'                 firstFooter = c("FIRST ONLY L", NA, "FIRST ONLY R"))
+#' 
+#' 
+#' saveWorkbook(wb, "setHeaderFooterExample.xlsx", overwrite = TRUE)
+setHeaderFooter <- function(wb, sheet,
+                            header = NULL,
+                            footer = NULL,
+                            evenHeader = NULL,
+                            evenFooter = NULL,
+                            firstHeader = NULL,
+                            firstFooter = NULL){
+  
   
   if(!"Workbook" %in% class(wb))
     stop("First argument must be a Workbook.")
   
-  position <- tolower(position)
-  if(!position %in% c("left", "center", "right")) 
-    stop("Invalid position.")
+  sheet <- wb$validateSheet(sheet)
   
-  if(length(text) != 1)
-    stop("Text argument must be a character vector of length 1")
+  if(!is.null(header) & length(header) != 3)
+    stop("header must have length 3 where elements correspond to positions: left, center, right.")
   
-  sheet <- wb$validateSheet(1)
-  wb$headFoot$text[wb$headFoot$pos == position & wb$headFoot$head == "head"] <- as.character(text)
+  if(!is.null(footer) & length(footer) != 3)
+    stop("footer must have length 3 where elements correspond to positions: left, center, right.")
   
-}
-
-
-#' @name setFooter
-#' @title Set footer for all worksheets
-#' @author Alexander Walker
-#' @param wb A workbook object
-#' @param text footer text. A character vector of length 1.
-#' @param position Postion of text in footer. One of "left", "center" or "right"
-#' @export
-#' @examples
-#' wb <- createWorkbook("Edgar Anderson")
-#' addWorksheet(wb, "S1")
-#' writeDataTable(wb, "S1", x = iris[1:30,], xy = c("C", 5))
-#' 
-#' ## set all headers
-#' setHeader(wb, "This is a header", position="center")
-#' setHeader(wb, "To the left", position="left")
-#' setHeader(wb, "On the right", position="right")
-#' 
-#' ## set all footers
-#' setFooter(wb, "Center Footer Here", position="center")
-#' setFooter(wb, "Bottom left", position="left")
-#' setFooter(wb, Sys.Date(), position="right")
-#' 
-#' saveWorkbook(wb, "headerFooterExample.xlsx", overwrite = TRUE)
-setFooter <- function(wb, text, position = "center"){
+  if(!is.null(evenHeader) & length(evenHeader) != 3)
+    stop("evenHeader must have length 3 where elements correspond to positions: left, center, right.")
   
-  if(!"Workbook" %in% class(wb))
-    stop("First argument must be a Workbook.")
+  if(!is.null(evenFooter) & length(evenFooter) != 3)
+    stop("evenFooter must have length 3 where elements correspond to positions: left, center, right.")
   
-  position <- tolower(position)
-  if(!position %in% c("left", "center", "right")) 
-    stop("Invalid position.")
+  if(!is.null(firstHeader) & length(firstHeader) != 3)
+    stop("firstHeader must have length 3 where elements correspond to positions: left, center, right.")
   
-  if(length(text) != 1)
-    stop("Text argument must be a character vector of length 1")
+  if(!is.null(firstFooter) & length(firstFooter) != 3)
+    stop("firstFooter must have length 3 where elements correspond to positions: left, center, right.")
   
-  sheet <- wb$validateSheet(1)
-  wb$headFoot$text[wb$headFoot$pos == position & wb$headFoot$head == "foot"] <- as.character(text)
+  oddHeader = headerFooterSub(header)
+  oddFooter = headerFooterSub(footer)
+  evenHeader = headerFooterSub(evenHeader)
+  evenFooter = headerFooterSub(evenFooter)
+  firstHeader = headerFooterSub(firstHeader)
+  firstFooter = headerFooterSub(firstFooter)
+  
+  naToNULLList <- function(x){
+    lapply(x, function(x) {
+      if(is.na(x))
+        return(NULL)
+      x})
+  }
+  
+  hf <- list(oddHeader = naToNULLList(oddHeader),
+             oddFooter = naToNULLList(oddFooter),
+             evenHeader = naToNULLList(evenHeader),
+             evenFooter = naToNULLList(evenFooter), 
+             firstHeader = naToNULLList(firstHeader),
+             firstFooter = naToNULLList(firstFooter))
+  
+  if(all(sapply(hf, length) == 0))
+    hf <- NULL
+  
+  
+  wb$worksheets[[sheet]]$headerFooter <- hf
+  
   
 }
-
 
 
 
@@ -1517,6 +1687,8 @@ setFooter <- function(wb, text, position = "center"){
 #' @param bottom bottom page margin in inches
 #' @param header header margin in inches
 #' @param footer footer margin in inches
+#' @param fitToWidth If TRUE, worksheet is scaled to fit to page width on printing.
+#' @param fitToHeight If TRUE, worksheet is scaled to fit to page height on printing.
 #' @export
 #' @examples
 #' wb <- createWorkbook()
@@ -1532,7 +1704,10 @@ setFooter <- function(wb, text, position = "center"){
 #' pageSetup(wb, sheet = 2, orientation = "portrait", scale = 300, left= 0.5, right = 0.5)
 #' 
 #' saveWorkbook(wb, "pageSetupExample.xlsx", overwrite = TRUE)
-pageSetup <- function(wb, sheet, orientation = "portrait", scale = 100, left = 0.7, right = 0.7, top = 0.75, bottom = 0.75, header = 0.3, footer = 0.3){
+pageSetup <- function(wb, sheet, orientation = "portrait", scale = 100,
+                      left = 0.7, right = 0.7, top = 0.75, bottom = 0.75,
+                      header = 0.3, footer = 0.3,
+                      fitToWidth = FALSE, fitToHeight = FALSE){
   
   if(!"Workbook" %in% class(wb))
     stop("First argument must be a Workbook.")
@@ -1543,13 +1718,20 @@ pageSetup <- function(wb, sheet, orientation = "portrait", scale = 100, left = 0
   if(scale < 10 | scale > 400)
     stop("Scale must be between 10 and 400.")
   
-  sheet <- wb$validateSheet(sheet)
+  for(sheet in sheet){
   
-  wb$worksheets[[sheet]]$pageSetup <- sprintf('<pageSetup paperSize="9" orientation="%s" scale = "%s" horizontalDpi="300" verticalDpi="300" r:id="rId2"/>', 
-                                              orientation, scale)
-  
-  wb$worksheets[[sheet]]$pageMargins <- 
-    sprintf('<pageMargins left="%s" right="%s" top="%s" bottom="%s" header="%s" footer="%s"/>"', left, right, top, bottom, header, footer)
+    sheet <- wb$validateSheet(sheet)
+    
+    wb$worksheets[[sheet]]$pageSetup <- sprintf('<pageSetup paperSize="9" orientation="%s" scale = "%s" fitToWidth="%s" fitToHeight="%s" horizontalDpi="300" verticalDpi="300" r:id="rId2"/>', 
+                                                orientation, scale, as.integer(fitToWidth), as.integer(fitToHeight))
+    
+    if(fitToHeight | fitToWidth)
+      wb$worksheets[[sheet]]$sheetPr <- unique(c(wb$worksheets[[sheet]]$sheetPr, '<pageSetUpPr fitToPage="1"/>'))
+    
+    wb$worksheets[[sheet]]$pageMargins <- 
+      sprintf('<pageMargins left="%s" right="%s" top="%s" bottom="%s" header="%s" footer="%s"/>"', left, right, top, bottom, header, footer)
+    
+  }
   
 }
 
@@ -1679,14 +1861,14 @@ convertToDate <- function(x, origin = "1970-1-1"){
 
 
 #' @name convertToDateTime
-#' @title Convert from excel time number to R as.POSIXct
+#' @title Convert from excel time number to R POSIXct type.
 #' @param x A numeric vector
 #' @param origin date. Default value is for Windows Excel 2010
 #' @details Excel stores dates as number of days from some origin day
 #' (this origin is "1970-1-1" for Excel 2010).
 #' @export
 #' @examples
-#' ##2014 April 21st to 25th
+#' ## 2014-07-01 & 2014-06-30
 #' x <- c(41821.8127314815, 41820.8127314815) 
 #' convertToDateTime(x)
 convertToDateTime <- function(x, origin = "1970-1-1"){
@@ -1762,6 +1944,179 @@ names.Workbook <- function(x){
 
 
 
+#' @name addFilter
+#' @title add filters to columns
+#' @param wb A workbook object
+#' @param sheet A name or index of a worksheet
+#' @param cols columns to add filter to. 
+#' @param rows A row numbers
+#' @seealso \code{\link{writeData}}
+#' @details adds filters to worksheet columns, same as filter parameters in writeData.
+#' writeDataTable automatically adds filters to first row of a table.
+#' NOTE Can only have a single filter per worksheet unless using tables.
+#' @export
+#' @seealso \code{\link{addFilter}}
+#' @examples
+#' wb <- createWorkbook()
+#' addWorksheet(wb, "Sheet 1")
+#' addWorksheet(wb, "Sheet 2")
+#' addWorksheet(wb, "Sheet 3")
+#' 
+#' writeData(wb, 1, iris)
+#' addFilter(wb, 1, row = 1, cols = 1:ncol(iris))
+#' 
+#' ## Equivalently
+#' writeData(wb, 2, x = iris, withFilter = TRUE)
+#' 
+#' ## Similarly
+#' writeDataTable(wb, 3, iris)
+#' 
+#' saveWorkbook(wb, file = "addFilterExample.xlsx", overwrite = TRUE)
+addFilter <- function(wb, sheet, rows, cols){
+  
+  if(!"Workbook" %in% class(wb))
+    stop("First argument must be a Workbook.")
+  
+  sheet <- wb$validateSheet(sheet)
+  
+  if(length(rows) != 1)
+    stop("row must be a numeric of length 1.")
+  
+  if(!is.numeric(cols))
+    cols <- convertFromExcelRef(cols)
+  
+  wb$worksheets[[sheet]]$autoFilter <- sprintf('<autoFilter ref="%s"/>', paste(getCellRefs(data.frame("x" = c(rows, rows), "y" = c(min(cols), max(cols)))), collapse = ":"))
+  
+  invisible(wb)
+  
+}
+
+
+#' @name removeFilter
+#' @title removes worksheet filter from addFilter and writeData
+#' @param wb A workbook object
+#' @param sheet A vector of names or indices of worksheets
+#' @export
+#' @examples
+#' wb <- createWorkbook()
+#' addWorksheet(wb, "Sheet 1")
+#' addWorksheet(wb, "Sheet 2")
+#' addWorksheet(wb, "Sheet 3")
+#' 
+#' writeData(wb, 1, iris)
+#' addFilter(wb, 1, row = 1, cols = 1:ncol(iris))
+#' 
+#' ## Equivalently
+#' writeData(wb, 2, x = iris, withFilter = TRUE)
+#' 
+#' ## Similarly
+#' writeDataTable(wb, 3, iris)
+#' 
+#' ## remove filters
+#' removeFilter(wb, 1:2) ## remove filters
+#' removeFilter(wb, 3) ## Does not affect tables!
+#' 
+#' saveWorkbook(wb, file = "removeFilterExample.xlsx", overwrite = TRUE)
+removeFilter <- function(wb, sheet){
+  
+  if(!"Workbook" %in% class(wb))
+    stop("First argument must be a Workbook.")
+  
+  for(s in sheet){
+    s <- wb$validateSheet(s)
+    wb$worksheets[[s]]$autoFilter <- NULL  
+  }
+  
+  invisible(wb)
+  
+}
 
 
 
+
+
+
+#' @name setHeader
+#' @title Set header for all worksheets
+#' @author Alexander Walker
+#' @param wb A workbook object
+#' @param text header text. A character vector of length 1.
+#' @param position Postion of text in header. One of "left", "center" or "right"
+#' @export
+#' @examples
+#' wb <- createWorkbook("Edgar Anderson")
+#' addWorksheet(wb, "S1")
+#' writeDataTable(wb, "S1", x = iris[1:30,], xy = c("C", 5))
+#' 
+#' ## set all headers
+#' setHeader(wb, "This is a header", position="center")
+#' setHeader(wb, "To the left", position="left")
+#' setHeader(wb, "On the right", position="right")
+#' 
+#' ## set all footers
+#' setFooter(wb, "Center Footer Here", position="center")
+#' setFooter(wb, "Bottom left", position="left")
+#' setFooter(wb, Sys.Date(), position="right")
+#' 
+#' saveWorkbook(wb, "headerFooterExample.xlsx", overwrite = TRUE)
+setHeader <- function(wb, text, position = "center"){
+  
+  warning("This function is deprecated. Use function 'setHeaderFooter()'")
+  
+  if(!"Workbook" %in% class(wb))
+    stop("First argument must be a Workbook.")
+  
+  position <- tolower(position)
+  if(!position %in% c("left", "center", "right")) 
+    stop("Invalid position.")
+  
+  if(length(text) != 1)
+    stop("Text argument must be a character vector of length 1")
+  
+  sheet <- wb$validateSheet(1)
+  wb$headFoot$text[wb$headFoot$pos == position & wb$headFoot$head == "head"] <- as.character(text)
+  
+}
+
+
+#' @name setFooter
+#' @title Set footer for all worksheets
+#' @author Alexander Walker
+#' @param wb A workbook object
+#' @param text footer text. A character vector of length 1.
+#' @param position Postion of text in footer. One of "left", "center" or "right"
+#' @export
+#' @examples
+#' wb <- createWorkbook("Edgar Anderson")
+#' addWorksheet(wb, "S1")
+#' writeDataTable(wb, "S1", x = iris[1:30,], xy = c("C", 5))
+#' 
+#' ## set all headers
+#' setHeader(wb, "This is a header", position="center")
+#' setHeader(wb, "To the left", position="left")
+#' setHeader(wb, "On the right", position="right")
+#' 
+#' ## set all footers
+#' setFooter(wb, "Center Footer Here", position="center")
+#' setFooter(wb, "Bottom left", position="left")
+#' setFooter(wb, Sys.Date(), position="right")
+#' 
+#' saveWorkbook(wb, "headerFooterExample.xlsx", overwrite = TRUE)
+setFooter <- function(wb, text, position = "center"){
+  
+  warning("This function is deprecated. Use function 'setHeaderFooter()'")
+  
+  if(!"Workbook" %in% class(wb))
+    stop("First argument must be a Workbook.")
+  
+  position <- tolower(position)
+  if(!position %in% c("left", "center", "right")) 
+    stop("Invalid position.")
+  
+  if(length(text) != 1)
+    stop("Text argument must be a character vector of length 1")
+  
+  sheet <- wb$validateSheet(1)
+  wb$headFoot$text[wb$headFoot$pos == position & wb$headFoot$head == "foot"] <- as.character(text)
+  
+}

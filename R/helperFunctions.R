@@ -1,6 +1,7 @@
 
 
-
+## creates style object based on column classes
+## Used in writeData for styling when no borders and writeData table for all column-class based styling
 classStyles <- function(wb, sheet, startRow, startCol, colNames, nRow, colClasses){
   
   sheet = wb$validateSheet(sheet)
@@ -16,7 +17,7 @@ classStyles <- function(wb, sheet, startRow, startCol, colNames, nRow, colClasse
     ## style hyperlinks
     inds <- which(sapply(colClasses, function(x) "hyperlink" %in% x))
     coords <- expand.grid(rowInds, inds +startCol)   
-    hyperlinkstyle <- createStyle(fontColour = "#0000FF", textDecoration = "underline")
+    hyperlinkstyle <- createStyle(textDecoration = "underline")
     hyperlinkstyle$fontColour <- list("theme"="10")
     styleElements <- list(style = hyperlinkstyle,
                           cells = list(list(sheet =  names(wb$worksheets)[[sheet]],
@@ -111,17 +112,31 @@ classStyles <- function(wb, sheet, startRow, startCol, colNames, nRow, colClasse
   }
   
   ## style big mark
-  if("3" %in% allColClasses){
-    inds <- which(sapply(colClasses, function(x) "3" %in% tolower(x)))
+  if("3" %in% allColClasses | "comma" %in% allColClasses){
+    inds <- which(sapply(colClasses, function(x) "3" %in% tolower(x) | "comma" %in% tolower(x)))
     coords <- expand.grid(rowInds, inds +startCol)  
     
     styleElements <- list(style = createStyle(numFmt = "3"),
                           cells = list(list(sheet =  names(wb$worksheets)[[sheet]],
                                             rows = coords[[1]],
                                             cols = coords[[2]])))
+   
+    newStylesElements <- append(newStylesElements, list(styleElements))
+  }
+
+  ## numeric sigfigs (Col must be numeric and numFmt options must only have 0s and \\.)
+  if("numeric" %in% allColClasses & !grepl("[^0\\.,#\\$\\* ]", getOption("openxlsx.numFmt", "GENERAL")) ){
+    inds <- which(sapply(colClasses, function(x) "numeric" %in% tolower(x)))
+    coords <- expand.grid(rowInds, inds +startCol)
+    
+    styleElements <- list(style = createStyle(numFmt = getOption("openxlsx.numFmt", "0")),
+                          cells = list(list(sheet =  names(wb$worksheets)[[sheet]],
+                                            rows = coords[[1]],
+                                            cols = coords[[2]])))
     
     newStylesElements <- append(newStylesElements, list(styleElements))
   }
+  
   
   if(!is.null(newStylesElements))
     wb$styleObjects <- append(wb$styleObjects, newStylesElements)
@@ -170,7 +185,23 @@ col2hex <- function(my.col) {
 }
 
 
-
+## header and footer replacements
+headerFooterSub <- function(x){
+  
+  if(!is.null(x)){
+    x <- replaceIllegalCharacters(x)
+    x <- gsub("\\[Page\\]", "P", x)
+    x <- gsub("\\[Pages\\]", "N", x)
+    x <- gsub("\\[Date\\]", "D", x)
+    x <- gsub("\\[Time\\]", "T", x)
+    x <- gsub("\\[Path\\]", "Z", x)
+    x <- gsub("\\[File\\]", "F", x)
+    x <- gsub("\\[Tab\\]", "A", x)
+  }
+  
+  return(x)
+  
+}
 
 
 
@@ -434,3 +465,62 @@ buildBorder <- function(x){
 
 
 
+
+genHeaderFooterNode <- function(x){
+  
+  # <headerFooter differentOddEven="1" differentFirst="1" scaleWithDoc="0" alignWithMargins="0">
+  #   <oddHeader>&amp;Lfirst L&amp;CfC&amp;RfR</oddHeader>
+  #   <oddFooter>&amp;LfFootL&amp;CfFootC&amp;RfFootR</oddFooter>
+  #   <evenHeader>&amp;LTIS&amp;CIS&amp;REVEN H</evenHeader>
+  #   <evenFooter>&amp;LEVEN L F&amp;CEVEN C F&amp;REVEN RIGHT F</evenFooter>
+  #   <firstHeader>&amp;L&amp;P&amp;Cfirst C&amp;Rfirst R</firstHeader>
+  #   <firstFooter>&amp;Lfirst L Foot&amp;Cfirst C Foot&amp;Rfirst R Foot</firstFooter>
+  #   </headerFooter>
+  
+  ## ODD
+  if(length(x$oddHeader) > 0){
+    oddHeader <- paste0('<oddHeader>', sprintf('&amp;L%s', x$oddHeader[[1]]), sprintf('&amp;C%s', x$oddHeader[[2]]), sprintf('&amp;R%s', x$oddHeader[[3]]), '</oddHeader>', collapse = "")
+  }else{
+    oddHeader <- NULL
+  }
+  
+  if(length(x$oddFooter) > 0){
+    oddFooter <- paste0('<oddFooter>', sprintf('&amp;L%s', x$oddFooter[[1]]), sprintf('&amp;C%s', x$oddFooter[[2]]), sprintf('&amp;R%s', x$oddFooter[[3]]), '</oddFooter>', collapse = "")
+  }else{
+    oddFooter <- NULL
+  }
+  
+  ## EVEN
+  if(length(x$evenHeader) > 0){
+    evenHeader <- paste0('<evenHeader>', sprintf('&amp;L%s', x$evenHeader[[1]]), sprintf('&amp;C%s', x$evenHeader[[2]]), sprintf('&amp;R%s', x$evenHeader[[3]]), '</evenHeader>', collapse = "")
+  }else{
+    evenHeader <- NULL
+  }
+  
+  if(length(x$evenFooter) > 0){
+    evenFooter <- paste0('<evenFooter>', sprintf('&amp;L%s', x$evenFooter[[1]]), sprintf('&amp;C%s', x$evenFooter[[2]]), sprintf('&amp;R%s', x$evenFooter[[3]]), '</evenFooter>', collapse = "")
+  }else{
+    evenFooter <- NULL
+  }
+  
+  ## FIRST
+  if(length(x$firstHeader) > 0){
+    firstHeader <- paste0('<firstHeader>', sprintf('&amp;L%s', x$firstHeader[[1]]), sprintf('&amp;C%s', x$firstHeader[[2]]), sprintf('&amp;R%s', x$firstHeader[[3]]), '</firstHeader>', collapse = "")
+  }else{
+    firstHeader <- NULL
+  }
+  
+  if(length(x$firstFooter) > 0){
+    firstFooter <- paste0('<firstFooter>', sprintf('&amp;L%s', x$firstFooter[[1]]), sprintf('&amp;C%s', x$firstFooter[[2]]), sprintf('&amp;R%s', x$firstFooter[[3]]), '</firstFooter>', collapse = "")
+  }else{
+    firstFooter <- NULL
+  }
+  
+  
+  headTag <- sprintf('<headerFooter differentOddEven="%s" differentFirst="%s" scaleWithDoc="0" alignWithMargins="0">',
+                     as.integer(!(is.null(evenHeader) & is.null(evenFooter))),
+                     as.integer(!(is.null(firstHeader) & is.null(firstFooter))))
+  
+  paste0(headTag, oddHeader, oddFooter, evenHeader, evenFooter, firstHeader, firstFooter, "</headerFooter>")
+  
+}

@@ -4,7 +4,9 @@
 \title{Write to a worksheet and format as a table}
 \usage{
 writeDataTable(wb, sheet, x, startCol = 1, startRow = 1, xy = NULL,
-  colNames = TRUE, rowNames = FALSE, tableStyle = "TableStyleLight9")
+  colNames = TRUE, rowNames = FALSE, tableStyle = "TableStyleLight9",
+  tableName = NULL, headerStyle = NULL, withFilter = TRUE,
+  keepNA = FALSE)
 }
 \arguments{
 \item{wb}{A Workbook object containing a worksheet.}
@@ -25,6 +27,14 @@ A vector of the form c(startCol, startRow)}
 \item{rowNames}{If TRUE, row names of x are written.}
 
 \item{tableStyle}{Any excel table style name or "none".}
+
+\item{tableName}{name of table in workbook. The table name must be unique.}
+
+\item{headerStyle}{Custom style to apply to column names.}
+
+\item{withFilter}{If TRUE, columns with have withFilters in the first row.}
+
+\item{keepNA}{If TRUE, NA values are converted to #N/A in Excel else NA cells will be empty.}
 }
 \description{
 Write to a worksheet and format as a table
@@ -41,7 +51,7 @@ addWorksheet(wb, "S1")
 addWorksheet(wb, "S2")
 addWorksheet(wb, "S3")
 
-## write data formatted as excel table with table filters
+## write data formatted as excel table with table withFilters
 # default table style is "TableStyleMedium2"
 writeDataTable(wb, "S1", x = iris)
 
@@ -60,6 +70,10 @@ class(df$Percentage) <- "percentage"
 class(df$TinyNumbers) <- "scientific"
 
 writeDataTable(wb, "S3", x = df, startRow = 4, rowNames=TRUE, tableStyle="TableStyleMedium9")
+
+## Additional headerStyling and remove withFilters
+writeDataTable(wb, sheet = 1, x = iris, startCol = 7, headerStyle = createStyle(textRotation = 45),
+withFilter = FALSE)
 
 saveWorkbook(wb, "writeDataTableExample.xlsx", overwrite = TRUE)
 }

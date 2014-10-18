@@ -28,9 +28,12 @@ genBaseColStyle <- function(cc){
   }else if("scientific" %in% cc){
     colStyle$numFmt <- list(numFmtId = "11")
     
-  }else if("3" %in% cc){
+  }else if("3" %in% cc | "comma" %in% cc){
     colStyle$numFmt <- list(numFmtId = "3")
     
+  }else if("numeric" %in% cc & !grepl("[^0\\.,#\\$\\* ]", getOption("openxlsx.numFmt", "GENERAL")) ){
+    colStyle$numFmt <- list("numFmtId" = 9999, "formatCode" = getOption("openxlsx.numFmt"))
+          
   }else{
     colStyle$numFmt <- list(numFmtId = "0")
     specialFormat <- FALSE
@@ -39,6 +42,7 @@ genBaseColStyle <- function(cc){
   
   list("style" = colStyle,
        "specialFormat" = specialFormat)
+  
   
 }
 

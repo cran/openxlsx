@@ -8,7 +8,7 @@ createStyle(fontName = NULL, fontSize = NULL, fontColour = NULL,
   borderColour = getOption("openxlsx.borderColour", "black"),
   borderStyle = getOption("openxlsx.borderStyle", "thin"), bgFill = NULL,
   fgFill = NULL, halign = NULL, valign = NULL, textDecoration = NULL,
-  wrapText = FALSE)
+  wrapText = FALSE, textRotation = NULL)
 }
 \arguments{
 \item{fontName}{A name of a font. Note the font name is not validated. If fontName is NULL,
@@ -33,10 +33,13 @@ If fontSize is NULL, the workbook base font size is used. (Defaults to 11)}
   \item{\bold{PERCENTAGE}}
   \item{\bold{FRACTION}}
   \item{\bold{SCIENTIFIC}}
+  \item{\bold{COMMA}{  for comma seperated thousands}}
+  \item{For date/datetime styling a combination of d, m, y and punctuation marks}
+  \item{For numeric rouding use "0.00" with the preferred number of deciaml places}
 }}
 
 \item{border}{Cell border
-(Any combination of "Top", "Bottom", "Left", "Right").
+(Any combination of "Top", "Bottom", "Left", "Right" in any order).
 \itemize{
    \item{\bold{Top}}{ Top border}
    \item{\bold{Bottom}}{ Bottom border}
@@ -100,6 +103,8 @@ Vertical alignment of cell contents
   }}
 
 \item{wrapText}{Logical. If TRUE cell contents will wrap to fit in column.}
+
+\item{textRotation}{Rotation of text in degrees. Numeric in [0, 180].}
 }
 \value{
 A style object

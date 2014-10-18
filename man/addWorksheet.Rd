@@ -3,7 +3,9 @@
 \alias{addWorksheet}
 \title{Add a worksheet to a workbook}
 \usage{
-addWorksheet(wb, sheetName, gridLines = TRUE)
+addWorksheet(wb, sheetName, gridLines = TRUE, tabColour = NULL,
+  zoom = 100, header = NULL, footer = NULL, evenHeader = NULL,
+  evenFooter = NULL, firstHeader = NULL, firstFooter = NULL)
 }
 \arguments{
 \item{wb}{A Workbook object to attach the new worksheet}
@@ -11,6 +13,22 @@ addWorksheet(wb, sheetName, gridLines = TRUE)
 \item{sheetName}{A name for the new worksheet}
 
 \item{gridLines}{A logical. If FALSE, the worksheet grid lines will be hidden.}
+
+\item{tabColour}{Colour of the worksheet tab. A valid colour (belonging to colours()) or a valid hex colour beginning with "#"}
+
+\item{zoom}{A numeric. Worksheet zoom level.}
+
+\item{header}{document header. Character vector of length 3 corresponding to positons left, center, right. Use NA to skip a positon.}
+
+\item{footer}{document footer. Character vector of length 3 corresponding to positons left, center, right. Use NA to skip a positon.}
+
+\item{evenHeader}{document header for even pages.}
+
+\item{evenFooter}{document footer for even pages.}
+
+\item{firstHeader}{document header for first page only.}
+
+\item{firstFooter}{document footer for first page only.}
 }
 \value{
 XML tree
@@ -18,14 +36,56 @@ XML tree
 \description{
 Add a worksheet to a workbook
 }
+\details{
+Headers and footers can contain special tags
+\itemize{
+  \item{\bold{&[Page]}}{ Page number}
+  \item{\bold{&[Pages]}}{ Number of pages}
+  \item{\bold{&[Date]}}{ Current date}
+  \item{\bold{&[Time]}}{ Current time}
+  \item{\bold{&[Path]}}{ File path}
+  \item{\bold{&[File]}}{ File name}
+  \item{\bold{&[Tab]}}{ Worksheet name}
+}
+}
 \examples{
 ## Create a new workbook
 wb <- createWorkbook("Fred")
 
 ## Add 3 worksheets
-addWorksheet(wb, "Worksheet Name")
-addWorksheet(wb, "This is worksheet 2")
-addWorksheet(wb, "The third worksheet")
+addWorksheet(wb, "Sheet 1")
+addWorksheet(wb, "Sheet 2", gridLines = FALSE)
+addWorksheet(wb, "Sheet 3", tabColour = "red")
+addWorksheet(wb, "Sheet 4", gridLines = FALSE, tabColour = "#4F81BD")
+
+## Headers and Footers
+addWorksheet(wb, "Sheet 5",
+header = c("ODD HEAD LEFT", "ODD HEAD CENTER", "ODD HEAD RIGHT"),
+footer = c("ODD FOOT RIGHT", "ODD FOOT CENTER", "ODD FOOT RIGHT"),
+evenHeader = c("EVEN HEAD LEFT", "EVEN HEAD CENTER", "EVEN HEAD RIGHT"),
+evenFooter = c("EVEN FOOT RIGHT", "EVEN FOOT CENTER", "EVEN FOOT RIGHT"),
+firstHeader = c("TOP", "OF FIRST", "PAGE"),
+firstFooter = c("BOTTOM", "OF FIRST", "PAGE"))
+
+addWorksheet(wb, "Sheet 6",
+             header = c("&[Date]", "ALL HEAD CENTER 2", "&[Page] / &[Pages]"),
+             footer = c("&[Path]&[File]", NA, "&[Tab]"),
+             firstHeader = c(NA, "Center Header of First Page", NA),
+             firstFooter = c(NA, "Center Footer of First Page", NA))
+
+addWorksheet(wb, "Sheet 7",
+             header = c("ALL HEAD LEFT 2", "ALL HEAD CENTER 2", "ALL HEAD RIGHT 2"),
+             footer = c("ALL FOOT RIGHT 2", "ALL FOOT CENTER 2", "ALL FOOT RIGHT 2"))
+
+addWorksheet(wb, "Sheet 8",
+             firstHeader = c("FIRST ONLY L", NA, "FIRST ONLY R"),
+             firstFooter = c("FIRST ONLY L", NA, "FIRST ONLY R"))
+
+## Need data on worksheet to see all headers and footers
+writeData(wb, sheet = 5, 1:400)
+writeData(wb, sheet = 6, 1:400)
+writeData(wb, sheet = 7, 1:400)
+writeData(wb, sheet = 8, 1:400)
 
 ## Save workbook
 saveWorkbook(wb, "addWorksheetExample.xlsx", overwrite = TRUE)
