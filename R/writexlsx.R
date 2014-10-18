@@ -19,13 +19,13 @@
 #' \itemize{
 #'   \item{\bold{creator}}{ A string specifying the workbook author}
 #'   \item{\bold{sheetName}}{ Name of the worksheet}
-#'   \item{\bold{gridLines}}{ A logical. If FALSE, the worksheet grid lines will be hidden.}
+#'   \item{\bold{gridLines}}{ A logical. If \code{FALSE}, the worksheet grid lines will be hidden.}
 #'   \item{\bold{startCol}}{ A vector specifiying the starting column(s) to write df}
 #'   \item{\bold{startRow}}{ A vector specifiying the starting row(s) to write df}
 #'   \item{\bold{xy}}{ An alternative to specifying startCol and startRow individually. 
 #'  A vector of the form c(startCol, startRow)}
-#'   \item{\bold{colNames or col.names}}{ If TRUE, column names of x are written.}
-#'   \item{\bold{rowNames or row.names}}{ If TRUE, row names of x are written.}
+#'   \item{\bold{colNames or col.names}}{ If \code{TRUE}, column names of x are written.}
+#'   \item{\bold{rowNames or row.names}}{ If \code{TRUE}, row names of x are written.}
 #'   \item{\bold{headerStyle}}{ Custom style to apply to column names.}
 #'   \item{\bold{borders}}{ Either "surrounding", "columns" or "rows" or NULL.  If "surrounding", a border is drawn around the
 #' data.  If "rows", a surrounding border is drawn a border around each row. If "columns", a surrounding border is drawn with a border
@@ -78,6 +78,14 @@ write.xlsx <- function(x, file, asTable = FALSE, ...){
   #---addWorksheet---#
   ## sheetName
   ## gridLines
+  ## tabColour = NULL
+  ## zoom = 100
+  ## header = NULL
+  ## footer = NULL
+  ## evenHeader = NULL
+  ## evenFooter = NULL
+  ## firstHeader = NULL
+  ## firstFooter = NULL
   
   #---writeData---#
   ## startCol = 1,
@@ -120,6 +128,20 @@ write.xlsx <- function(x, file, asTable = FALSE, ...){
     sheetName <- as.character(params$sheetName)
   }
   
+  tabColour <- NULL
+  if("tabColour" %in% names(params))
+    tabColour <- validateColour(params$tabColour, "Invalid tabColour!")
+  
+  zoom <- 100
+  if("zoom" %in% names(params)){
+    if(is.numeric(params$zoom)){
+      zoom <- params$zoom[1]
+    }else{
+      stop("zoom must be numeric")
+    }
+  }
+
+  ## AddWorksheet
   gridLines <- TRUE
   if("gridLines" %in% names(params)){
     if(all(is.logical(params$gridLines))){
@@ -138,6 +160,7 @@ write.xlsx <- function(x, file, asTable = FALSE, ...){
     }
   }
   
+
   withFilter <- TRUE
   if("withFilter" %in% names(params)){
     if(is.logical(params$withFilter)){
@@ -187,7 +210,7 @@ write.xlsx <- function(x, file, asTable = FALSE, ...){
   rowNames <- FALSE
   if("rowNames" %in% names(params)){
     if(is.logical(params$rowNames)){
-      colNames <- params$rowNames
+      rowNames <- params$rowNames
     }else{
       stop("Argument colNames must be TRUE or FALSE")
     }
@@ -251,7 +274,7 @@ write.xlsx <- function(x, file, asTable = FALSE, ...){
   
   ## create new Workbook object
   wb <- Workbook$new(creator)
-  
+
   ## If a list is supplied write to individual worksheets using names if available
   if("list" %in% class(x)){
     
@@ -264,6 +287,11 @@ write.xlsx <- function(x, file, asTable = FALSE, ...){
       nms[nms %in% ""] <- paste("Sheet", (1:nSheets)[nms %in% ""])
     }else{
       nms <- make.names(nms, unique  = TRUE)
+    }
+    
+    if(any(nchar(nms) > 31)){
+      warning("Truncating list names to 31 characters.")
+      nms <- substr(nms, 1, 31)
     }
     
     ## make all inputs as long as the list
@@ -283,8 +311,8 @@ write.xlsx <- function(x, file, asTable = FALSE, ...){
       startCol <- rep_len(startCol, length.out = nSheets)
         
     if(length(headerStyle) != nSheets & !is.null(headerStyle))
-      headerStyle <- rep_len(headerStyle, length.out = nSheets)
-    
+      headerStyle <- lapply(1:nSheets, function(x) headerStyle)
+        
     if(length(borders) != nSheets & !is.null(borders))
       borders <- rep_len(borders, length.out = nSheets)
     
@@ -302,37 +330,37 @@ write.xlsx <- function(x, file, asTable = FALSE, ...){
     
     for(i in 1:nSheets){
       
-      wb$addWorksheet(nms[[i]], showGridLines = gridLines)
+      wb$addWorksheet(nms[[i]], showGridLines = gridLines, tabColour = tabColour, zoom = zoom)
       
       if(asTable[i]){
                 
         writeDataTable(wb = wb,
                        sheet = i,
                        x = x[[i]],
-                       startCol = startCol[i],
-                       startRow = startRow[i],
+                       startCol = startCol[[i]],
+                       startRow = startRow[[i]],
                        xy = xy,
-                       colNames = colNames[i],
-                       rowNames = rowNames[i],
-                       tableStyle = tableStyle[i],
+                       colNames = colNames[[i]],
+                       rowNames = rowNames[[i]],
+                       tableStyle = tableStyle[[i]],
                        tableName = NULL,
-                       headerStyle = headerStyle[i],
-                       withFilter = withFilter[i])
+                       headerStyle = headerStyle[[i]],
+                       withFilter = withFilter[[i]])
         
       }else{
         
         writeData(wb = wb, 
                   sheet = i,
                   x = x[[i]],
-                  startCol = startCol[i],
-                  startRow = startRow[i], 
+                  startCol = startCol[[i]],
+                  startRow = startRow[[i]], 
                   xy = xy,
-                  colNames = colNames[i],
-                  rowNames = rowNames[i],
-                  headerStyle = headerStyle[i],
-                  borders = borders[i],
-                  borderColour = borderColour[i],
-                  borderStyle = borderStyle[i])
+                  colNames = colNames[[i]],
+                  rowNames = rowNames[[i]],
+                  headerStyle = headerStyle[[i]],
+                  borders = borders[[i]],
+                  borderColour = borderColour[[i]],
+                  borderStyle = borderStyle[[i]])
         
       }
       
@@ -342,7 +370,7 @@ write.xlsx <- function(x, file, asTable = FALSE, ...){
     
   }else{
     
-    wb$addWorksheet(sheetName, showGridLines = gridLines)
+    wb$addWorksheet(sheetName, showGridLines = gridLines, tabColour = tabColour, zoom = zoom)
     
     if(asTable){
       

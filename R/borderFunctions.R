@@ -7,10 +7,10 @@ genBaseColStyle <- function(cc){
   specialFormat <- TRUE
   
   if("date" %in% cc){
-    colStyle <- createStyle(numFmt = "date")
+    colStyle <- createStyle("numFmt" = "date")
     
   }else if(any(c("posixlt", "posixct", "posixt") %in% cc)){
-    colStyle <- createStyle(numFmt = "longdate")
+    colStyle <- createStyle("numFmt" = "longdate")
     
   }else if("currency" %in% cc){
     colStyle$numFmt <- list("numFmtId" = "164", "formatCode" = "&quot;$&quot;#,##0.00")
@@ -19,21 +19,20 @@ genBaseColStyle <- function(cc){
     colStyle$numFmt <- list("numFmtId" = "44")
     
   }else if("hyperlink" %in% cc){
-    colStyle$fontDecoration <- "UNDERLINE"
-    colStyle$fontColour <- list("rgb" = "FF0000FF")
+    colStyle$fontColour <- list("theme"="10")
     
   }else if("percentage" %in% cc){
-    colStyle$numFmt <- list(numFmtId = "10")
+    colStyle$numFmt <- list("numFmtId" = "10")
     
   }else if("scientific" %in% cc){
-    colStyle$numFmt <- list(numFmtId = "11")
+    colStyle$numFmt <- list("numFmtId" = "11")
     
   }else if("3" %in% cc | "comma" %in% cc){
-    colStyle$numFmt <- list(numFmtId = "3")
+    colStyle$numFmt <- list("numFmtId" = "3")
     
   }else if("numeric" %in% cc & !grepl("[^0\\.,#\\$\\* ]", getOption("openxlsx.numFmt", "GENERAL")) ){
     colStyle$numFmt <- list("numFmtId" = 9999, "formatCode" = getOption("openxlsx.numFmt"))
-          
+    
   }else{
     colStyle$numFmt <- list(numFmtId = "0")
     specialFormat <- FALSE
@@ -50,13 +49,13 @@ genBaseColStyle <- function(cc){
 
 Workbook$methods(surroundingBorders = function(colClasses, sheet, startRow, startCol, nRow, nCol, borderColour, borderStyle, borderType){
   
-  sheet <- names(worksheets)[[sheet]]
+  sheet <- names(worksheets)[[validateSheet(sheet)]]
   ## steps
   # get column class
   # get corresponding base style
-  
+
   for(i in 1:nCol){
-    
+
     tmp <- genBaseColStyle(colClasses[[i]])
     
     colStyle <- tmp$style
@@ -87,11 +86,11 @@ Workbook$methods(surroundingBorders = function(colClasses, sheet, startRow, star
         sTop$borderRightColour <- borderColour
         
         styleObjects <<- append(styleObjects, list(
-          list(style = sTop,
-               cells = list(list("sheet" = sheet,
-                                 "rows" = startRow,
-                                 "cols" = startCol
-               )))
+          list("style" = sTop,
+               "sheet" = sheet,
+               "rows" = startRow,
+               "cols" = startCol
+          )
         ))
         
       }else if(nCol == 1){
@@ -124,27 +123,27 @@ Workbook$methods(surroundingBorders = function(colClasses, sheet, startRow, star
         sBot$borderRightColour <- borderColour
         
         styleObjects <<- append(styleObjects, list(
-          list(style = sTop,
-               cells = list(list("sheet" = sheet,
-                                 "rows" = startRow,
-                                 "cols" = startCol
-               )))
+          list("style" = sTop,
+               "sheet" = sheet,
+               "rows" = startRow,
+               "cols" = startCol
+          )
         ))
         
         styleObjects <<- append(styleObjects, list(
-          list(style = sMid,
-               cells = list(list("sheet" = sheet,
-                                 "rows" = (startRow + 1L):(startRow + nRow - 2L)   , #2nd -> 2nd to last
-                                 "cols" = rep.int(startCol, nRow - 2L)
-               )))
+          list("style" = sMid,
+               "sheet" = sheet,
+               "rows" = (startRow + 1L):(startRow + nRow - 2L)   , #2nd -> 2nd to last
+               "cols" = rep.int(startCol, nRow - 2L)
+          )
         ))
         
         styleObjects <<- append(styleObjects, list(
-          list(style = sBot,
-               cells = list(list("sheet" = sheet,
-                                 "rows" = startRow + nRow - 1L,
-                                 "cols" = startCol
-               )))
+          list("style" = sBot,
+               "sheet" = sheet,
+               "rows" = startRow + nRow - 1L,
+               "cols" = startCol
+          )
         ))
         
         
@@ -161,11 +160,11 @@ Workbook$methods(surroundingBorders = function(colClasses, sheet, startRow, star
         sTop$borderLeftColour <- borderColour
         
         styleObjects <<- append(styleObjects, list(
-          list(style = sTop,
-               cells = list(list("sheet" = sheet,
-                                 "rows" = startRow,
-                                 "cols" = startCol
-               )))
+          list("style" = sTop,
+               "sheet" = sheet,
+               "rows" = startRow,
+               "cols" = startCol
+          )
         ))
         
       }else{
@@ -189,27 +188,29 @@ Workbook$methods(surroundingBorders = function(colClasses, sheet, startRow, star
         sBot$borderBottomColour <- borderColour
         
         styleObjects <<- append(styleObjects, list(
-          list(style = sTop,
-               cells = list(list("sheet" = sheet,
-                                 "rows" = startRow,
-                                 "cols" = startCol
-               )))
+          list("style" = sTop,
+               "sheet" = sheet,
+               "rows" = startRow,
+               "cols" = startCol
+          )
         ))
         
-        styleObjects <<- append(styleObjects, list(
-          list(style = sMid,
-               cells = list(list("sheet" = sheet,
-                                 "rows" = (startRow + 1L):(startRow + nRow - 2L)   , #2nd -> 2nd to last
-                                 "cols" = rep.int(startCol, nRow - 2L)
-               )))
-        ))
+        if(nRow > 2){
+          styleObjects <<- append(styleObjects, list(
+            list("style" = sMid,
+                 "sheet" = sheet,
+                 "rows" = (startRow + 1L):(startRow + nRow - 2L)   , #2nd -> 2nd to last
+                 "cols" = rep.int(startCol, nRow - 2L)
+            )
+          ))
+        }
         
         styleObjects <<- append(styleObjects, list(
-          list(style = sBot,
-               cells = list(list("sheet" = sheet,
-                                 "rows" = startRow + nRow - 1L,
-                                 "cols" = startCol
-               )))
+          list("style" = sBot,
+               "sheet" = sheet,
+               "rows" = startRow + nRow - 1L,
+               "cols" = startCol
+          )
         ))
         
         
@@ -232,11 +233,11 @@ Workbook$methods(surroundingBorders = function(colClasses, sheet, startRow, star
         sTop$borderRightColour <- borderColour
         
         styleObjects <<- append(styleObjects, list(
-          list(style = sTop,
-               cells = list(list("sheet" = sheet,
-                                 "rows" = startRow,
-                                 "cols" = startCol + nCol - 1L
-               )))
+          list("style" = sTop,
+               "sheet" = sheet,
+               "rows" = startRow,
+               "cols" = startCol + nCol - 1L
+          )
         ))
         
         
@@ -261,30 +262,30 @@ Workbook$methods(surroundingBorders = function(colClasses, sheet, startRow, star
         sBot$borderBottomColour <- borderColour
         
         styleObjects <<- append(styleObjects, list(
-          list(style = sTop,
-               cells = list(list("sheet" = sheet,
-                                 "rows" = startRow,
-                                 "cols" = startCol + nCol - 1L
-               )))
+          list("style" = sTop,
+               "sheet" = sheet,
+               "rows" = startRow,
+               "cols" = startCol + nCol - 1L
+          )
         ))
+        
+        if(nRow > 2){
+          styleObjects <<- append(styleObjects, list(
+            list("style" = sMid,
+                 "sheet" = sheet,
+                 "rows" = (startRow + 1L):(startRow + nRow - 2L)   , #2nd -> 2nd to last
+                 "cols" = rep.int(startCol + nCol - 1L, nRow - 2L)
+            )
+          ))
+        }
         
         
         styleObjects <<- append(styleObjects, list(
-          list(style = sMid,
-               cells = list(list("sheet" = sheet,
-                                 "rows" = (startRow + 1L):(startRow + nRow - 2L)   , #2nd -> 2nd to last
-                                 "cols" = rep.int(startCol + nCol - 1L, nRow - 2L)
-               )))
-        ))
-        
-        
-        
-        styleObjects <<- append(styleObjects, list(
-          list(style = sBot,
-               cells = list(list("sheet" = sheet,
-                                 "rows" = startRow + nRow - 1L,
-                                 "cols" = startCol + nCol - 1L
-               )))
+          list("style" = sBot,
+               "sheet" = sheet,
+               "rows" = startRow + nRow - 1L,
+               "cols" = startCol + nCol - 1L
+          )
         )) 
         
       }
@@ -302,11 +303,11 @@ Workbook$methods(surroundingBorders = function(colClasses, sheet, startRow, star
         sTop$borderBottomColour <- borderColour
         
         styleObjects <<- append(styleObjects, list(
-          list(style = sTop,
-               cells = list(list("sheet" = sheet,
-                                 "rows" = startRow,
-                                 "cols" = startCol + i - 1L
-               )))
+          list("style" = sTop,
+               "sheet" = sheet,
+               "rows" = startRow,
+               "cols" = startCol + i - 1L
+          )
         ))
         
       }else{
@@ -320,30 +321,30 @@ Workbook$methods(surroundingBorders = function(colClasses, sheet, startRow, star
         sBot$borderBottomColour <- borderColour
         
         styleObjects <<- append(styleObjects, list(
-          list(style = sTop,
-               cells = list(list("sheet" = sheet,
-                                 "rows" = startRow,
-                                 "cols" = startCol + i - 1L
-               )))
+          list("style" = sTop,
+               "sheet" = sheet,
+               "rows" = startRow,
+               "cols" = startCol + i - 1L
+          )
         ))
         
         ## Middle
         if(specialFormat){
           styleObjects <<- append(styleObjects, list(
-            list(style = sMid,
-                 cells = list(list("sheet" = sheet,
-                                   "rows" = (startRow + 1L):(startRow + nRow - 2L)   , #2nd -> 2nd to last
-                                   "cols" = rep.int(startCol + i - 1L, nRow - 2L)
-                 )))
+            list("style" = sMid,
+                 "sheet" = sheet,
+                 "rows" = (startRow + 1L):(startRow + nRow - 2L)   , #2nd -> 2nd to last
+                 "cols" = rep.int(startCol + i - 1L, nRow - 2L)
+            )
           ))
         }
         
         styleObjects <<- append(styleObjects, list(
-          list(style = sBot,
-               cells = list(list("sheet" = sheet,
-                                 "rows" = startRow + nRow - 1L,
-                                 "cols" = startCol + i - 1L
-               )))
+          list("style" = sBot,
+               "sheet" = sheet,
+               "rows" = startRow + nRow - 1L,
+               "cols" = startCol + i - 1L
+          )
         ))
       }
       
@@ -365,7 +366,7 @@ Workbook$methods(surroundingBorders = function(colClasses, sheet, startRow, star
 
 Workbook$methods(rowBorders = function(colClasses, sheet, startRow, startCol, nRow, nCol, borderColour, borderStyle, borderType){
   
-  sheet <- names(worksheets)[[sheet]]
+  sheet <- names(worksheets)[[validateSheet(sheet)]]
   ## steps
   # get column class
   # get corresponding base style
@@ -432,11 +433,11 @@ Workbook$methods(rowBorders = function(colClasses, sheet, startRow, startCol, nR
     } ## End of if(i == 1), i == NCol, else inside columns
     
     styleObjects <<- append(styleObjects, list(
-      list(style = sTop,
-           cells = list(list("sheet" = sheet,
-                             "rows" = (startRow):(startRow + nRow - 1L),
-                             "cols" = rep(startCol + i - 1L, nRow)
-           )))
+      list("style" = sTop,
+           "sheet" = sheet,
+           "rows" = (startRow):(startRow + nRow - 1L),
+           "cols" = rep(startCol + i - 1L, nRow)
+      )
     ))
     
   }## End of loop through columns
@@ -451,7 +452,7 @@ Workbook$methods(rowBorders = function(colClasses, sheet, startRow, startCol, nR
 
 Workbook$methods(columnBorders = function(colClasses, sheet, startRow, startCol, nRow, nCol, borderColour, borderStyle, borderType){
   
-  sheet <- names(worksheets)[[sheet]]
+  sheet <- names(worksheets)[[validateSheet(sheet)]]
   ## steps
   # get column class
   # get corresponding base style
@@ -483,11 +484,11 @@ Workbook$methods(columnBorders = function(colClasses, sheet, startRow, startCol,
       sTop$borderRightColour <- borderColour
       
       styleObjects <<- append(styleObjects, list(
-        list(style = sTop,
-             cells = list(list("sheet" = sheet,
-                               "rows" = startRow,
-                               "cols" = startCol + i - 1L
-             )))
+        list("style" = sTop,
+             "sheet" = sheet,
+             "rows" = startRow,
+             "cols" = startCol + i - 1L
+             )
       ))
       
       
@@ -523,28 +524,30 @@ Workbook$methods(columnBorders = function(colClasses, sheet, startRow, startCol,
       colInd <- startCol + i - 1L
       
       styleObjects <<- append(styleObjects, list(
-        list(style = sTop,
-             cells = list(list("sheet" = sheet,
-                               "rows" = startRow,
-                               "cols" = colInd
-             )))
+        list("style" = sTop,
+             "sheet" = sheet,
+             "rows" = startRow,
+             "cols" = colInd
+             )
       ))
       
-      styleObjects <<- append(styleObjects, list(
-        list(style = sMid,
-             cells = list(list("sheet" = sheet,
-                               "rows" = (startRow + 1L):(startRow + nRow - 2L),
-                               "cols" = rep(colInd, nRow - 2L)
-             )))
-      ))
+      if(nRow > 2){
+        styleObjects <<- append(styleObjects, list(
+          list("style" = sMid,
+               "sheet" = sheet,
+               "rows" = (startRow + 1L):(startRow + nRow - 2L),
+               "cols" = rep(colInd, nRow - 2L)
+               )
+        ))
+      }
       
       
       styleObjects <<- append(styleObjects, list(
-        list(style = sBot,
-             cells = list(list("sheet" = sheet,
-                               "rows" = startRow + nRow - 1L,
-                               "cols" = colInd
-             )))
+        list("style" = sBot,
+             "sheet" = sheet,
+             "rows" = startRow + nRow - 1L,
+             "cols" = colInd
+             )
       ))
       
     }
@@ -566,7 +569,7 @@ Workbook$methods(allBorders = function(colClasses, sheet, startRow, startCol, nR
   ## steps
   # get column class
   # get corresponding base style
-  
+
   for(i in 1:nCol){
     
     tmp <- genBaseColStyle(colClasses[[i]])
@@ -586,11 +589,11 @@ Workbook$methods(allBorders = function(colClasses, sheet, startRow, startCol, nR
     sTop$borderRightColour <- borderColour
     
     styleObjects <<- append(styleObjects, list(
-      list(style = sTop,
-           cells = list(list("sheet" = sheet,
-                             "rows" = (startRow):(startRow + nRow - 1L),
-                             "cols" = rep(startCol + i - 1L, nRow)
-           )))
+      list("style" = sTop,
+           "sheet" = sheet,
+           "rows" = (startRow):(startRow + nRow - 1L),
+           "cols" = rep(startCol + i - 1L, nRow)
+           )
     ))
     
   }## End of loop through columns

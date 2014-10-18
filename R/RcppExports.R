@@ -13,6 +13,10 @@ cppReadFile <- function(xmlFile) {
     .Call('openxlsx_cppReadFile', PACKAGE = 'openxlsx', xmlFile)
 }
 
+cppReadFile2 <- function(xmlFile) {
+    .Call('openxlsx_cppReadFile2', PACKAGE = 'openxlsx', xmlFile)
+}
+
 getVals <- function(x) {
     .Call('openxlsx_getVals', PACKAGE = 'openxlsx', x)
 }
@@ -93,8 +97,8 @@ buildMatrixNumeric <- function(v, rowInd, colInd, colNames, nRows, nCols) {
     .Call('openxlsx_buildMatrixNumeric', PACKAGE = 'openxlsx', v, rowInd, colInd, colNames, nRows, nCols)
 }
 
-buildMatrixMixed <- function(v, rowInd, colInd, colNames, nRows, nCols, charCols) {
-    .Call('openxlsx_buildMatrixMixed', PACKAGE = 'openxlsx', v, rowInd, colInd, colNames, nRows, nCols, charCols)
+buildMatrixMixed <- function(v, vn, rowInd, colInd, colNames, nRows, nCols, charCols, dateCols, originAdj) {
+    .Call('openxlsx_buildMatrixMixed', PACKAGE = 'openxlsx', v, vn, rowInd, colInd, colNames, nRows, nCols, charCols, dateCols, originAdj)
 }
 
 matrixRowInds <- function(indices) {
@@ -105,12 +109,8 @@ buildCellMerges <- function(comps) {
     .Call('openxlsx_buildCellMerges', PACKAGE = 'openxlsx', comps)
 }
 
-readWorkbook <- function(v, vn, stringInds, r, tR, nRows, hasColNames, skipEmptyRows) {
-    .Call('openxlsx_readWorkbook', PACKAGE = 'openxlsx', v, vn, stringInds, r, tR, nRows, hasColNames, skipEmptyRows)
-}
-
-quickBuildCellXML <- function(prior, post, sheetData, rowNumbers, R_fileName) {
-    .Call('openxlsx_quickBuildCellXML', PACKAGE = 'openxlsx', prior, post, sheetData, rowNumbers, R_fileName)
+quickBuildCellXML <- function(prior, post, sheetData, rowNumbers, styleInds, R_fileName) {
+    .Call('openxlsx_quickBuildCellXML', PACKAGE = 'openxlsx', prior, post, sheetData, rowNumbers, styleInds, R_fileName)
 }
 
 buildTableXML <- function(table, ref, colNames, showColNames, tableStyle, withFilter) {
@@ -141,15 +141,43 @@ removeEmptyNodes <- function(x, emptyNodes) {
     .Call('openxlsx_removeEmptyNodes', PACKAGE = 'openxlsx', x, emptyNodes)
 }
 
+getCellsWithChildrenLimited <- function(xmlFile, emptyNodes, n) {
+    .Call('openxlsx_getCellsWithChildrenLimited', PACKAGE = 'openxlsx', xmlFile, emptyNodes, n)
+}
+
 getCellsWithChildren <- function(xmlFile, emptyNodes) {
     .Call('openxlsx_getCellsWithChildren', PACKAGE = 'openxlsx', xmlFile, emptyNodes)
 }
 
-quickBuildCellXML2 <- function(prior, post, sheetData, rowNumbers, rowHeights, R_fileName) {
-    .Call('openxlsx_quickBuildCellXML2', PACKAGE = 'openxlsx', prior, post, sheetData, rowNumbers, rowHeights, R_fileName)
+quickBuildCellXML2 <- function(prior, post, sheetData, rowNumbers, styleInds, rowHeights, R_fileName) {
+    .Call('openxlsx_quickBuildCellXML2', PACKAGE = 'openxlsx', prior, post, sheetData, rowNumbers, styleInds, rowHeights, R_fileName)
 }
 
 getRefsVals <- function(x, startRow) {
     .Call('openxlsx_getRefsVals', PACKAGE = 'openxlsx', x, startRow)
+}
+
+createAlignmentNode <- function(style) {
+    .Call('openxlsx_createAlignmentNode', PACKAGE = 'openxlsx', style)
+}
+
+createFillNode <- function(style) {
+    .Call('openxlsx_createFillNode', PACKAGE = 'openxlsx', style)
+}
+
+createFontNode <- function(style, defaultFontSize, defaultFontColour, defaultFontName) {
+    .Call('openxlsx_createFontNode', PACKAGE = 'openxlsx', style, defaultFontSize, defaultFontColour, defaultFontName)
+}
+
+createBorderNode <- function(style, borders) {
+    .Call('openxlsx_createBorderNode', PACKAGE = 'openxlsx', style, borders)
+}
+
+getCellStylesPossiblyMissing <- function(x) {
+    .Call('openxlsx_getCellStylesPossiblyMissing', PACKAGE = 'openxlsx', x)
+}
+
+readWorkbook <- function(v, vn, r, string_refs, is_date, nRows, hasColNames, skipEmptyRows, originAdj) {
+    .Call('openxlsx_readWorkbook', PACKAGE = 'openxlsx', v, vn, r, string_refs, is_date, nRows, hasColNames, skipEmptyRows, originAdj)
 }
 

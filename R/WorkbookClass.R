@@ -27,13 +27,21 @@ Workbook <- setRefClass("Workbook", fields = c(".rels",
                                                
                                                "queryTables",
                                                "rowHeights",
+                                               
+                                               "slicers",
+                                               "slicerCaches",
+                                               
                                                "sharedStrings",
                                                "sheetData",
                                                "styleObjects",
                                                "styles",
+                                               "styleInds",
                                                "tables",
                                                "tables.xml.rels",
                                                "theme",
+                                               
+                                               "vbaProject",
+                                               
                                                "workbook",
                                                "workbook.xml.rels",
                                                "worksheets",
@@ -64,7 +72,10 @@ Workbook$methods(initialize = function(creator = Sys.info()[["login"]]){
   workbook <<- genBaseWorkbook()
   sheetData <<- list()
   rowHeights <<- list()
+  
   styleObjects <<- list()
+  styleInds <<- list()
+  
   colWidths <<- list()
   dataCount <<- list()
   freezePane <<- list()
@@ -85,6 +96,10 @@ Workbook$methods(initialize = function(creator = Sys.info()[["login"]]){
   pivotRecords <<- NULL
   pivotDefinitionsRels <<- NULL
   
+  slicers <<- NULL
+  slicerCaches <<- NULL
+  
+  vbaProject <<- NULL
   
   attr(sharedStrings, "uniqueCount") <<- 0
   
@@ -123,8 +138,14 @@ Workbook$methods(addWorksheet = function(sheetName, showGridLines = TRUE, tabCol
   
   newSheetIndex = length(worksheets) + 1L
   
+  if(newSheetIndex > 1){
+    sheetId <- max(as.integer(regmatches(workbook$sheets, regexpr('(?<=sheetId=")[0-9]+', workbook$sheets, perl = TRUE)))) + 1L
+  }else{
+    sheetId <- 1
+  }
+  
   ##  Add sheet to workbook.xml
-  workbook$sheets <<- c(workbook$sheets, sprintf('<sheet name="%s" sheetId="%s" r:id="rId%s"/>', sheetName, newSheetIndex, newSheetIndex))
+  workbook$sheets <<- c(workbook$sheets, sprintf('<sheet name="%s" sheetId="%s" r:id="rId%s"/>', sheetName, sheetId, newSheetIndex))
   
   ## append to worksheets list
   worksheets <<- append(worksheets, genBaseSheet(sheetName = sheetName, showGridLines = showGridLines, 
@@ -147,10 +168,12 @@ Workbook$methods(addWorksheet = function(sheetName, showGridLines = TRUE, tabCol
   
   ## create sheet.rels to simplify id assignment
   worksheets_rels[[newSheetIndex]] <<- genBaseSheetRels(newSheetIndex)
-  drawings_rels[[newSheetIndex]] <<- ""
-  drawings[[newSheetIndex]] <<- ""
+  drawings_rels[[newSheetIndex]] <<- list()
+  drawings[[newSheetIndex]] <<- list()
   
   sheetData[[newSheetIndex]] <<- list()
+  styleInds[[newSheetIndex]] <<- list()
+  
   rowHeights[[newSheetIndex]] <<- list()
   colWidths[[newSheetIndex]] <<- list()
   freezePane[[newSheetIndex]] <<- list()
@@ -180,6 +203,7 @@ Workbook$methods(saveWorkbook = function(quiet = TRUE){
   nSheets <- length(worksheets)
   nThemes <- length(theme)
   nPivots <- length(pivotTables)
+  nSlicers <- length(slicers)
   
   relsDir <- file.path(tmpDir, "_rels")
   dir.create(path = relsDir, recursive = TRUE)
@@ -242,7 +266,6 @@ Workbook$methods(saveWorkbook = function(quiet = TRUE){
     
     pivotCacheRelsDir <- file.path(tmpDir, "xl", "pivotCache", "_rels")
     dir.create(path = pivotCacheRelsDir, recursive = TRUE)
-    
     for(i in 1:nPivots){
       .Call("openxlsx_writeFile", "", pivotTables[[i]], "", file.path(pivotTablesDir, sprintf("pivotTable%s.xml", i)))
       .Call("openxlsx_writeFile", "", pivotTables.xml.rels[[i]], "", file.path(pivotTablesRelsDir, sprintf("pivotTable%s.xml.rels", i)))   
@@ -252,6 +275,26 @@ Workbook$methods(saveWorkbook = function(quiet = TRUE){
     }
     
   }
+  
+  ## slicers
+  if(nSlicers > 0){
+
+    slicersDir <- file.path(tmpDir, "xl", "slicers")
+    dir.create(path = slicersDir, recursive = TRUE)
+    
+    slicerCachesDir <- file.path(tmpDir, "xl", "slicerCaches")
+    dir.create(path = slicerCachesDir, recursive = TRUE)
+    
+    for(i in 1:length(slicers))
+      if(nchar(slicers[[i]]) > 0)
+        .Call("openxlsx_writeFile", "", slicers[[i]], "", file.path(slicersDir, sprintf("slicer%s.xml", i)))
+    
+    for(i in 1:length(slicerCaches))
+      .Call("openxlsx_writeFile", "", slicerCaches[[i]], "", file.path(slicerCachesDir, sprintf("slicerCache%s.xml", i)))
+    
+    
+  }
+  
   
   ## Write content
   
@@ -281,9 +324,9 @@ Workbook$methods(saveWorkbook = function(quiet = TRUE){
         file.path(xlrelsDir, "workbook.xml.rels"))
   
   ## write tables
-  if(length(unlist(tables)) > 0){
-    for(i in 1:length(unlist(tables))){
-      .Call("openxlsx_writeFile", '', pxml(unlist(tables)[[i]]), '', file.path(xlTablesDir, sprintf("table%s.xml", i+2)))
+  if(length(unlist(tables, use.names = FALSE)) > 0){
+    for(i in 1:length(unlist(tables, use.names = FALSE))){
+      .Call("openxlsx_writeFile", '', pxml(unlist(tables, use.names = FALSE)[[i]]), '', file.path(xlTablesDir, sprintf("table%s.xml", i+2)))
       
       if(tables.xml.rels[[i]] != "")
         .Call("openxlsx_writeFile", '', tables.xml.rels[[i]], '', file.path(xlTablesRelsDir, sprintf("table%s.xml.rels", i+2)))
@@ -341,10 +384,14 @@ Workbook$methods(saveWorkbook = function(quiet = TRUE){
     close(con)        
   })
   
+  ## VBA Macro
+  if(!is.null(vbaProject))
+    file.copy(vbaProject, xlDir)
+  
   ## write worksheet, worksheet_rels, drawings, drawing_rels
   .self$writeSheetDataXML(xldrawingsDir, xldrawingsRelsDir, xlworksheetsDir, xlworksheetsRelsDir)
   
-  ## write shareStrings.xml
+  ## write sharedStrings.xml
   ct <- Content_Types
   if(length(sharedStrings) > 0){
     .Call("openxlsx_writeFile",
@@ -374,7 +421,7 @@ Workbook$methods(saveWorkbook = function(quiet = TRUE){
   styleXML$cellStyleXfs <- c(sprintf('<cellStyleXfs count="%s">', length(styles$cellStyleXfs)), pxml(styles$cellStyleXfs), '</cellStyleXfs>')
   styleXML$cellXfs <- paste0(sprintf('<cellXfs count="%s">', length(styles$cellXfs)), pxml(styles$cellXfs), '</cellXfs>')
   styleXML$cellStyles <- paste0(sprintf('<cellStyles count="%s">', length(styles$cellStyles)), pxml(styles$cellStyles), '</cellStyles>')
-  styleXML$dxfs <- ifelse(length(styles$dxfs) == 0, '<dxfs count="0"/>', paste0(sprintf('<dxfs count="%s">', length(styles$dxfs)), pxml(styles$dxfs), '</dxfs>'))
+  styleXML$dxfs <- ifelse(length(styles$dxfs) == 0, '<dxfs count="0"/>', paste0(sprintf('<dxfs count="%s">', length(styles$dxfs)), paste(unlist(styles$dxfs), collapse = ""), '</dxfs>'))
   
   ## write styles.xml
   .Call("openxlsx_writeFile", '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:x14ac="http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac" mc:Ignorable="x14ac">',
@@ -382,9 +429,13 @@ Workbook$methods(saveWorkbook = function(quiet = TRUE){
         '</styleSheet>',
         file.path(xlDir,"styles.xml"))
   
+  
   ## write workbook.xml
   workbookXML <- workbook
   workbookXML$sheets <- paste0("<sheets>", pxml(workbookXML$sheets), "</sheets>")
+  if(length(workbookXML$definedNames) > 0)
+    workbookXML$definedNames <- paste0("<definedNames>", pxml(workbookXML$definedNames), "</definedNames>")
+  
   .Call("openxlsx_writeFile", '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">',
         pxml(workbookXML),
         '</workbook>',   
@@ -399,9 +450,9 @@ Workbook$methods(saveWorkbook = function(quiet = TRUE){
   
   zipWorkbook(tmpFile, list.files(tmpDir, recursive = TRUE, include.dirs = TRUE, all.files=TRUE), quiet = quiet)
   
-  ## reset styles
+  ## reset styles - maintain any changes to base font
   baseFont <- styles$fonts[[1]]
-  styles <<- genBaseStyleSheet(styles$dxfs)
+  styles <<- genBaseStyleSheet(styles$dxfs, tableStyles = styles$tableStyles, extLst = styles$extLst)
   styles$fonts[[1]] <<- baseFont
   
   invisible(list("tmpDir" = tmpDir, "tmpFile" = tmpFile))
@@ -504,12 +555,21 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
   nRows <- nrow(df)  
   
   allColClasses <- unlist(colClasses)  
+
+  ## pull out NaN values
+  nans <- unlist(lapply(1:ncol(df), function(i) is.nan(df[[i]]) | is.infinite(df[[i]])))
   
   ## convert any Dates to integers and create date style object
   if(any(c("date", "posixct", "posixt") %in% allColClasses)){
+    
     dInds <- which(sapply(colClasses, function(x) "date" %in% x))
+    
+    origin <- 25569L
+    if(grepl('date1904="1"|date1904="true"', paste(unlist(workbook), collapse = ""), ignore.case = TRUE))
+      origin <- 24107L
+    
     for(i in dInds)
-      df[,i] <- as.integer(df[,i]) + 25569
+      df[[i]] <- as.integer(df[[i]]) + origin
     
     t <- format(Sys.time(), "%z")
     offSet <- suppressWarnings(ifelse(substr(t,1,1) == "+", 1L, -1L) * (as.integer(substr(t,2,3)) + as.integer(substr(t,4,5)) / 60) / 24)
@@ -519,25 +579,25 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
     
     pInds <- which(sapply(colClasses, function(x) any(c("posixct", "posixt", "posixlt") %in% x)))
     for(i in pInds)
-      df[,i] <- as.numeric(as.POSIXct(df[,i])) / 86400 + 25569 + offSet
+      df[[i]] <- as.numeric(as.POSIXct(df[[i]])) / 86400L + origin + offSet
   }
   
   ## convert any Dates to integers and create date style object
   if(any(c("currency", "accounting", "percentage", "3", "comma") %in% allColClasses)){
     cInds <- which(sapply(colClasses, function(x) any(c("accounting", "currency", "percentage", "3", "comma") %in% tolower(x))))
     for(i in cInds)
-      df[,i] <- as.numeric(gsub("[^0-9\\.-]", "", df[,i]))
+      df[[i]] <- as.numeric(gsub("[^0-9\\.-]", "", df[[i]]))
   }
   
   if("hyperlink" %in% allColClasses){
     for(i in which(sapply(colClasses, function(x) "hyperlink" %in% x)))
-      class(df[,i]) <- "hyperlink"
+      class(df[[i]]) <- "hyperlink"
   }
   
   ## convert scientific
   if("scientific" %in% allColClasses){
     for(i in which(sapply(colClasses, function(x) "scientific" %in% x)))
-      class(df[,i]) <- "numeric"
+      class(df[[i]]) <- "numeric"
   }
   
   colClasses <- sapply(df, function(x) tolower(class(x))[[1]]) ## by here all cols must have a single class only
@@ -545,20 +605,18 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
   ## convert logicals (Excel stores logicals as 0 & 1)
   if("logical" %in% allColClasses){
     for(i in which(sapply(colClasses, function(x) "logical" %in% x)))
-      class(df[,i]) <- "numeric"
+      class(df[[i]]) <- "numeric"
   }
-  
-  
   
   ## convert all numerics to character (this way preserves digits)
   if("numeric" %in% allColClasses){
     for(i in which(sapply(colClasses, function(x) "numeric" %in% x)))
-      class(df[,i]) <- "character"
+      class(df[[i]]) <- "character"
   }
   
   ## cell types
   t <- .Call("openxlsx_buildCellTypes", colClasses, nRows, PACKAGE = "openxlsx")
-  
+
   ## cell values
   v <- as.character(t(as.matrix(df)))
   
@@ -570,6 +628,13 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
     v[is.na(v)] <- as.character(NA)
   }
   
+  ## If any NaN values
+  if(length(nans) > 0){
+    nans <- which(t(matrix(nans, nrow = nrow(df), ncol = ncol(df))))
+    t[nans] <- "e"
+    v[nans] <- "#NUM!"
+  }
+    
   
   #prepend column headers 
   if(colNames){
@@ -645,34 +710,132 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
 
 
 
-Workbook$methods(updateCellStyles = function(sheet, rows, cols, styleId){
+Workbook$methods(updateStyles2 = function(style){
   
-  if(length(rows) == 0)
-    return(NULL)
   
-  ## convert sheet name to index
-  sheet <- which(names(worksheets) == sheet)
-  tmp <- .Call("openxlsx_writeCellStyles", sheetData[[sheet]], as.character(rows), cols, as.character(styleId), LETTERS)
+  ## Updates styles.xml
+  xfNode <- list(numFmtId = 0,
+                 fontId = 0,
+                 fillId = 0,
+                 borderId = 0,
+                 xfId = 0)
   
-  if(length(tmp) > length(sheetData[[sheet]]))
-    dataCount[[sheet]] <<- dataCount[[sheet]] + 1
+  baseFont <- .self$getBaseFont()
+  defaultFontSize <- sprintf('<sz %s=\"%s\"/>', names(baseFont$size), baseFont$size)
+  defaultFontColour <- sprintf('<color %s=\"%s\"/>', names(baseFont$colour), baseFont$colour)
+  defaultFontName <- sprintf('<name %s=\"%s\"/>', names(baseFont$name), baseFont$name)
   
-  sheetData[[sheet]] <<- tmp
+  style <- style$as.list()
+  alignmentFlag <- FALSE
   
+  ## Font
+  if(!is.null(style$fontName) | !is.null(style$fontSize) |  !is.null(style$fontColour) | !is.null(style$fontDecoration)){
+    
+    if(!is.null(style$fontSize$val))
+      style$fontSize$val <- as.character(style$fontSize$val)
+    
+    if(!is.null(style$fontDecoration))
+      style$fontDecoration <- c("BOLD", "ITALIC", "UNDERLINE", "UNDERLINE2", "STRIKEOUT")[c("BOLD", "ITALIC", "UNDERLINE", "UNDERLINE2", "STRIKEOUT") %in% style$fontDecoration]
+    
+    fontNode <- .Call("openxlsx_createFontNode", style, defaultFontSize, defaultFontColour, defaultFontName)
+    fontId <- which(styles$font == fontNode) - 1L
+    
+    if(length(fontId) == 0){
+      
+      fontId <- length(styles$fonts)
+      styles$fonts <<- c(styles[["fonts"]], fontNode)        
+      
+    }
+    
+    xfNode$fontId <- fontId
+    xfNode <- append(xfNode, list("applyFont" = "1"))
+  }
+  
+  
+  ## numFmt
+  if(!is.null(style$numFmt)){
+    if(as.integer(style$numFmt$numFmtId) > 0){
+      
+      style$numFmt$numFmtId <- as.character(style$numFmt$numFmtId)
+      numFmtId <- style$numFmt$numFmtId
+      
+      if(as.integer(numFmtId) > 163L){
+        
+        tmp <- style$numFmt$formatCode
+        styles$numFmts <<- unique(c(styles$numFmts, sprintf('<numFmt numFmtId="%s" formatCode="%s"/>', numFmtId, tmp)))
+        
+      }
+      
+      xfNode$numFmtId <- numFmtId
+      xfNode <- append(xfNode, list("applyNumberFormat" = "1"))
+      
+    }
+  }
+  
+  ## Fill
+  if(!is.null(style$fillFg) | !is.null(style$fillBg)){
+    
+    fillNode <- .Call("openxlsx_createFillNode", style)
+    fillId <- which(styles$fill == fillNode) - 1L
+    
+    if(length(fillId) == 0){      
+      fillId <- length(styles$fills)
+      styles$fills <<- c(styles$fills, fillNode)
+    }
+    
+    xfNode$fillId <- fillId
+    xfNode <- append(xfNode, list("applyFill" = "1"))
+  }
+  
+  ## Border
+  if(any(!is.null(c(style$borderLeft, style$borderRight, style$borderTop, style$borderBottom)))){
+    
+    borderNode <-  .Call("openxlsx_createBorderNode", style, c("borderLeft", "borderRight", "borderTop", "borderBottom"))
+    borderId <- which(styles$borders == borderNode) - 1L
+    
+    if(length(borderId) == 0){
+      borderId <- length(styles$borders)
+      styles$borders <<- c(styles$borders, borderNode)
+    }
+    
+    xfNode$borderId <- borderId
+    xfNode <- append(xfNode, list("applyBorder" = "1"))
+  }
+  
+  ## Alignment
+  if(!is.null(style$halign) | !is.null(style$valign) | !is.null(style$wrapText) | !is.null(style$textRotation)){
+    
+    if(!is.null(style$textRotation))
+      style$textRotation <- as.character(style$textRotation)
+    alignmentFlag <- TRUE
+    
+    alignNode <- .Call("openxlsx_createAlignmentNode", style)
+    xfNode <- append(xfNode, list("applyAlignment" = "1"))
+  }
+  
+  if(alignmentFlag){
+    xfNode <- paste0("<xf ", paste(paste0(names(xfNode), '="', xfNode, '"'), collapse = " "), ">", alignNode, '</xf>')  
+  }else{
+    xfNode <- paste0("<xfv", paste(paste0(names(xfNode), '="', xfNode, '"'), collapse = " "), "/>")
+  }
+  
+  styleId <- which(styles$cellXfs == xfNode) - 1L
+  if(length(styleId) == 0){
+    styleId <- length(styles$cellXfs)
+    styles$cellXfs <<- c(styles$cellXfs, xfNode)
+  }
+  
+  
+  return(as.integer(styleId))
   
 })
+
 
 
 Workbook$methods(updateStyles = function(style){
   
   
   ## Updates styles.xml
-  numFmtId <- 0
-  fontId <- 0
-  fillId <- 0
-  borderId <- 0
-  xfId <- 0
-  
   xfNode <- list(numFmtId = 0,
                  fontId = 0,
                  fillId = 0,
@@ -683,7 +846,12 @@ Workbook$methods(updateStyles = function(style){
   alignmentFlag <- FALSE
   
   ## Font
-  if(!is.null(style$fontName) | !is.null(style$fontSize) |  !is.null(style$fontColour)){
+  if(!is.null(style$fontName) |
+     !is.null(style$fontSize) |
+     !is.null(style$fontColour) |
+     !is.null(style$fontDecoration) | 
+     !is.null(style$fontFamily) | 
+     !is.null(style$fontScheme)){
     
     fontNode <- .self$createFontNode(style)
     fontId <- which(styles$font == fontNode) - 1L
@@ -701,34 +869,36 @@ Workbook$methods(updateStyles = function(style){
   
   
   ## numFmt
-  if(as.integer(style$numFmt$numFmtId) > 0){
-    numFmtId <- style$numFmt$numFmtId
-    if(as.integer(numFmtId) > 163L){
+  if(!is.null(style$numFmt)){
+    if(as.integer(style$numFmt$numFmtId) > 0){
+      numFmtId <- style$numFmt$numFmtId
+      if(as.integer(numFmtId) > 163L){
+        
+        tmp <- style$numFmt$formatCode
+        
+        styles$numFmts <<- unique(c(styles$numFmts,
+                                    sprintf('<numFmt numFmtId="%s" formatCode="%s"/>', numFmtId, tmp)
+        ))
+      }
       
-      tmp <- style$numFmt$formatCode
-      
-      styles$numFmts <<- unique(c(styles$numFmts,
-                                  sprintf('<numFmt numFmtId="%s" formatCode="%s"/>', numFmtId, tmp)
-      ))
+      xfNode$numFmtId <- numFmtId
+      xfNode <- append(xfNode, list("applyNumberFormat" = "1"))
     }
-    
-    xfNode$numFmtId <- numFmtId
-    xfNode <- append(xfNode, list("applyNumberFormat" = "1"))
-    
   }
   
   ## Fill
-  if(!is.null(style$fill$fillFg) | !is.null(style$fill$fillBg)){
-    
-    fillNode <- .self$createFillNode(style$fill)
-    fillId <- which(styles$fill == fillNode) - 1L
-    
-    if(length(fillId) == 0){      
-      fillId <- length(styles$fills)
-      styles$fills <<- c(styles$fills, fillNode)
+  if(!is.null(style$fill)){
+    fillNode <- .self$createFillNode(style)
+    if(!is.null(fillNode)){
+      fillId <- which(styles$fill == fillNode) - 1L
+      
+      if(length(fillId) == 0){      
+        fillId <- length(styles$fills)
+        styles$fills <<- c(styles$fills, fillNode)
+      }
+      xfNode$fillId <- fillId
+      xfNode <- append(xfNode, list("applyFill" = "1"))
     }
-    xfNode$fillId <- fillId
-    xfNode <- append(xfNode, list("applyFill" = "1"))
   }
   
   ## Border
@@ -761,8 +931,11 @@ Workbook$methods(updateStyles = function(style){
     if(!is.null(style$valign))
       alignNode <- paste(alignNode, sprintf('vertical="%s"', style$valign))
     
-    if(style$wrapText)
-      alignNode <- paste(alignNode, 'wrapText="1"')
+    if(!is.null(style$wrapText)){
+      if(style$wrapText)
+        alignNode <- paste(alignNode, 'wrapText="1"')
+    }
+    
     
     alignNode <- paste0(alignNode, "/>")
     
@@ -770,12 +943,10 @@ Workbook$methods(updateStyles = function(style){
     xfNode <- append(xfNode, list("applyAlignment" = "1"))
   }
   
-  styleId <- length(styles$cellXfs)
-  
   if(alignmentFlag){
     xfNode <- paste0("<xf ", paste(paste0(names(xfNode), '="',xfNode, '"'), collapse = " "), ">", alignNode, '</xf>')  
   }else{
-    xfNode <- paste0("<xfv", paste(paste0(names(xfNode), '="',xfNode, '"'), collapse = " "), "/>")
+    xfNode <- paste0("<xf ", paste(paste0(names(xfNode), '="',xfNode, '"'), collapse = " "), "/>")
   }
   
   styleId <- which(styles$cellXfs == xfNode) - 1L
@@ -796,8 +967,16 @@ Workbook$methods(getBaseFont = function(){
   
   sz <- getAttrs(baseFont, "<sz ")
   colour <- getAttrs(baseFont, "<color ")
-  name <- getAttrs(baseFont, "<name ")
-  family <- getAttrs(baseFont, "<family ")
+  name <- getAttrs(baseFont, "<name ")  
+  
+  if(length(sz[[1]]) == 0)
+    sz <- list("val" = "10")
+  
+  if(length(colour[[1]]) == 0)
+    colour <- list("rgb" = "#000000")
+  
+  if(length(name[[1]]) == 0)
+    name <- list("val" = "Calibri")
   
   list("size" = sz,
        "colour" = colour,
@@ -850,10 +1029,10 @@ Workbook$methods(createFontNode = function(style){
     fontNode <- paste0(fontNode, '<i/>')
   
   if("UNDERLINE" %in% style$fontDecoration)
-    fontNode <- paste0(fontNode, '<u val = "single"/>')
+    fontNode <- paste0(fontNode, '<u val="single"/>')
   
   if("UNDERLINE2" %in% style$fontDecoration)
-    fontNode <- paste0(fontNode, '<u val = "double"/>')
+    fontNode <- paste0(fontNode, '<u val="double"/>')
   
   if("STRIKEOUT" %in% style$fontDecoration)
     fontNode <- paste0(fontNode, '<strike/>')
@@ -884,22 +1063,30 @@ Workbook$methods(createBorderNode = function(style){
 })
 
 
-Workbook$methods(createFillNode = function(fill, patternType="solid"){
+Workbook$methods(createFillNode = function(style, patternType = "solid"){
   
-  fillNode <- '<fill>'
-  fillNode <- paste0(fillNode, sprintf('<patternFill patternType="%s">', patternType))
-  
-  
-  
-  
-  if(!is.null(fill$fillFg))
-    fillNode <- paste0(fillNode, sprintf('<fgColor %s/>', paste(paste0(names(fill$fillFg), '="', fill$fillFg, '"'), collapse = " ")))
-  
-  if(!is.null(fill$fillBg))
-    fillNode <- paste0(fillNode, sprintf('<bgColor %s/>', paste(paste0(names(fill$fillBg), '="', fill$fillBg, '"'), collapse = " ")))
-  
-  fillNode <- paste0(fillNode, "</patternFill>")
-  fillNode <- paste0(fillNode, "</fill>")
+  fill <- style$fill
+
+  ## gradientFill
+  if(any(grepl("gradientFill", fill))){
+    
+    fillNode <- paste0("<fill>", fill, "</fill>")
+    
+  }else if(!is.null(fill$fillFg) | !is.null(fill$fillBg)){
+    
+    fillNode <- paste0('<fill>', sprintf('<patternFill patternType="%s">', patternType))
+    
+    if(!is.null(fill$fillFg))
+      fillNode <- paste0(fillNode, sprintf('<fgColor %s/>', paste(paste0(names(fill$fillFg), '="', fill$fillFg, '"'), collapse = " ")))
+    
+    if(!is.null(fill$fillBg))
+      fillNode <- paste0(fillNode, sprintf('<bgColor %s/>', paste(paste0(names(fill$fillBg), '="', fill$fillBg, '"'), collapse = " ")))
+    
+    fillNode <- paste0(fillNode, "</patternFill></fill>")
+    
+  }else{
+    return(NULL)
+  }
   
   return(fillNode)
   
@@ -923,17 +1110,33 @@ Workbook$methods(setSheetName = function(sheet, newSheetName){
   
   ## Rename in workbook
   sheetId <- regmatches(workbook$sheets[[sheet]], regexpr('(?<=sheetId=")[0-9]+', workbook$sheets[[sheet]], perl = TRUE))
-  workbook$sheets[[sheet]] <<- sprintf('<sheet name="%s" sheetId="1" r:id="rId%s"/>', newSheetName, sheetId)
+  rId <- regmatches(workbook$sheets[[sheet]], regexpr('(?<= r:id="rId)[0-9]+', workbook$sheets[[sheet]], perl = TRUE))
+  workbook$sheets[[sheet]] <<- sprintf('<sheet name="%s" sheetId="%s" r:id="rId%s"/>', newSheetName, sheetId, rId)
   
-  ## remove styleObjects
+  ## rename styleObjects sheet component
   if(length(styleObjects) > 0){
+    
     styleObjects <<- lapply(styleObjects, function(x){
-      x$cells <- lapply(x$cells, function(s){ if(s$sheet == oldName) s$sheet <- newSheetName; s})
-      x
+      
+      if(x$sheet == oldName)
+        x$sheet <- newSheetName
+      
+      return(x)      
+      
     })
+    
   }
   
-  
+  ## rename defined names
+  if(length(workbook$definedNames) > 0){
+    
+    belongTo <- getDefinedNamesSheet(workbook$definedNames)
+    toChange <- belongTo == oldName
+    if(any(toChange))
+      workbook$definedNames[toChange] <<- gsub(oldName, newSheetName, workbook$definedName[toChange], fixed = TRUE)
+    
+  }
+
 })
 
 
@@ -984,7 +1187,7 @@ Workbook$methods(writeSheetDataXML = function(xldrawingsDir, xldrawingsRelsDir, 
       ws$headerFooter <- genHeaderFooterNode(ws$headerFooter)
     
     if(!is.null(ws$sheetPr))
-      ws$sheetPr <- paste0("<sheetPr>", paste(ws$sheetPr, collapse = ""), "</sheetPr>")
+      ws$sheetPr <- ws$sheetPr #paste0("<sheetPr>", paste(ws$sheetPr, collapse = ""), "</sheetPr>")
     
     if(length(worksheets[[i]]$tableParts) > 0)
       ws$tableParts <- paste0(sprintf('<tableParts count="%s">', length(worksheets[[i]]$tableParts)), pxml(worksheets[[i]]$tableParts), '</tableParts>')
@@ -1005,9 +1208,12 @@ Workbook$methods(writeSheetDataXML = function(xldrawingsDir, xldrawingsRelsDir, 
     
     ## Sort sheetData before writing
     if(dataCount[[i]] > 1L | length(rowHeights[[i]]) > 0){
-      r <- sapply(sheetData[[i]], "[[", "r")      
+      r <- unlist(lapply(sheetData[[i]], "[[", "r"), use.names = TRUE)     
       sheetData[[i]] <<- sheetData[[i]][order(as.integer(names(r)), nchar(r), r)]
       dataCount[[i]] <<- 1L
+      
+      if(length(styleInds[[i]]) > 0)
+        styleInds[[i]] <<- styleInds[[i]][match(unlist(lapply(sheetData[[i]], "[[", "r"), use.names = FALSE), names(styleInds[[i]]))]
     }
     
     if(length(rowHeights[[i]]) == 0){
@@ -1017,6 +1223,7 @@ Workbook$methods(writeSheetDataXML = function(xldrawingsDir, xldrawingsRelsDir, 
             post,
             sheetData[[i]],
             as.integer(names(sheetData[[i]])),
+            styleInds[[i]],
             file.path(xlworksheetsDir, sprintf("sheet%s.xml", i)),
             PACKAGE = "openxlsx")
       
@@ -1028,7 +1235,8 @@ Workbook$methods(writeSheetDataXML = function(xldrawingsDir, xldrawingsRelsDir, 
             post,
             sheetData[[i]],
             as.integer(names(sheetData[[i]])),
-            rowHeights[[i]],
+            as.character(unname(styleInds[[i]])),
+            unlist(rowHeights[[i]]),
             file.path(xlworksheetsDir, sprintf("sheet%s.xml", i)),
             PACKAGE="openxlsx")
       
@@ -1067,14 +1275,14 @@ Workbook$methods(writeSheetDataXML = function(xldrawingsDir, xldrawingsRelsDir, 
 
 
 Workbook$methods(setColWidths = function(sheet){
-  
+
   sheet = validateSheet(sheet)
   
   widths <- unlist(lapply(colWidths[[sheet]], "[[", "width"))
   cols <- unlist(lapply(colWidths[[sheet]], "[[", "col"))
   names(widths) <- cols
   
-  autoColsInds <- widths == "auto"
+  autoColsInds <- widths %in% c("auto", "auto2")
   autoCols <- cols[autoColsInds]
   
   ## If any not auto
@@ -1083,9 +1291,13 @@ Workbook$methods(setColWidths = function(sheet){
   
   ## If any auto
   if(length(autoCols) > 0){
-    
+
     ## only run if data on worksheet
-    if(length(sheetData[[sheet]]) == 0){
+    if(length(sheetData[[sheet]]) == 0 ){
+      
+      missingAuto <- autoCols
+      
+    }else if(all(is.na(sapply(sheetData[[sheet]], "[[", "v")))){
       
       missingAuto <- autoCols
       
@@ -1116,23 +1328,17 @@ Workbook$methods(setColWidths = function(sheet){
       #########----------------------------------------------------------------
       
       ## get char widths for each style object
-      if(length(styleObjects) > 0){
+      if(length(styleObjects) > 0 & any(!is.na(styleInds[[sheet]]))){
+        
         thisSheetName <- names(worksheets)[sheet]
         
-        # subset styleObjects to this worksheet
-        styleCells <- lapply(styleObjects, "[[", "cells")
-        
-        onSheetInds <- sapply(styleCells, function(x) thisSheetName %in% sapply(x, "[[", "sheet"))
-        stySubset <- lapply(styleObjects[onSheetInds], "[[", "style")
-        styIds <- sapply(styleObjects[onSheetInds], "[[", "id")
-        
-        dupFlag <- duplicated(styIds)
-        styIds <- styIds[!dupFlag]
-        stySubset <- stySubset[!dupFlag]
-        names(stySubset) <- styIds
+        ## Calc font width for all styles on this worksheet
+        styleIds <- styleInds[[sheet]]
+        styObSubet <- styleObjects[sort(unique(styleIds))]
+        stySubset <- lapply(styObSubet, "[[", "style") 
         
         ## loop through stlye objects assignin a charWidth else baseFontCharWidth
-        styleCharWidths <- sapply(stySubset, function(thisStyle){
+        styleCharWidths <- unlist(lapply(stySubset, function(thisStyle){
           
           fN <- unlist(thisStyle$fontName, use.names = FALSE)
           if(is.null(fN)){
@@ -1160,21 +1366,55 @@ Workbook$methods(setColWidths = function(sheet){
           
           styleMaxCharWidth
           
-        })
-        
-        ## Now we can loop through every cell and calculate assign a character width
-        styRef <- as.numeric(unname(sapply(sheetData[[sheet]], "[[", "s", USE.NAMES = FALSE)))
-        
-        for(i in 1:length(styleCharWidths))
-          allCharWidths[styRef == names(styleCharWidths)[[i]]] <- styleCharWidths[[i]]
+        }), use.names = FALSE)
         
         
+        ## Now assign all cells a character width
+        allCharWidths <- styleCharWidths[styleInds[[sheet]]]
+        allCharWidths[is.na(allCharWidths)] <- baseFontCharWidth
+      }
+      
+      ## Now check for columns that are auto2
+      auto2Inds <- which(widths %in% "auto2")
+      if(length(auto2Inds) > 0 & length(worksheets[[sheet]]$mergeCells) > 0){
+        
+        sd <- sheetData[[sheet]]
+        
+        ## get cell merges
+        
+        exMerges <- regmatches(worksheets[[sheet]]$mergeCells, regexpr("[A-Z0-9]+:[A-Z0-9]+", worksheets[[sheet]]$mergeCells))
+        
+        comps <- lapply(exMerges, function(rectCoords) unlist(strsplit(rectCoords, split = ":")))  
+        col <- lapply(comps, convertFromExcelRef)
+        col <- lapply(col, function(x) x[x %in% cols[auto2Inds]]) ## subset to auto2Inds
+        
+        rows <- lapply(comps, function(x) as.numeric(gsub("[A-Z]", "", x)))
+        rows <- rows[sapply(col, length) > 0]
+        col <- col[sapply(col, length) > 0]
+        
+        if(length(col) > 0){
+          
+          allCells <- lapply(1:length(col), function(i) expand.grid( min(col[[i]]):max(col[[i]]),  min(rows[[i]]):max(rows[[i]])))
+          allCells <- do.call("rbind", allCells)
+          allCells <- paste0(convert2ExcelRef(allCells[[1]], LETTERS), allCells[[2]])
+          
+          r <- lapply(sheetData[[sheet]], "[[", "r")
+          sd <-  sheetData[[sheet]][!r %in% allCells]
+          allCharWidths <- allCharWidths[!r %in% allCells]
+          
+        }else{
+          sd <- sheetData[[sheet]] 
+        }
+        
+        
+      }else{
+        sd <- sheetData[[sheet]]
       }
       
       ## Now that we have the max character width for the largest font on the page calculate the column widths
       calculatedWidths <- .Call("openxlsx_calcColumnWidths",
-                                sheetData = sheetData[[sheet]],
-                                sharedStrings = unlist(sharedStrings),
+                                sheetData = sd,
+                                sharedStrings = unlist(sharedStrings, use.names = FALSE),
                                 columnInds = as.integer(autoCols),
                                 width = allCharWidths,
                                 baseFontCharWidth = baseFontCharWidth,
@@ -1224,22 +1464,24 @@ Workbook$methods(deleteWorksheet = function(sheet){
   # Remove highest sheet from Content_Types
   # Remove drawings element
   # Remove drawings_rels element
-  # Remove rowheights element
+  # Remove rowHeights element
   # Remove sheetData
   # Remove styleObjects on sheet
   # Remove last sheet element from workbook
   # Remove last sheet element from workbook.xml.rels
   # Remove element from worksheets
   # Remove element from worksheets_rels
-  # Remove Freeze Pane
+  # Remove freezePane
   # Remove dataCount
   # Remove hyperlinks
   # Reduce calcChain i attributes & remove calcs on sheet
   # Remove sheet from sheetOrder
+  # Remove styleInds element
+  # Remove queryTable references from workbook$definedNames to worksheet
   
   sheet <- validateSheet(sheet)
   sheetNames <- names(worksheets)
-  nSheets <- length(unlist(sheetNames))
+  nSheets <- length(unlist(sheetNames, use.names = FALSE))
   sheetName <- sheetNames[[sheet]]
   
   colWidths[[sheet]] <<- NULL
@@ -1255,40 +1497,80 @@ Workbook$methods(deleteWorksheet = function(sheet){
   rowHeights[[sheet]] <<- NULL
   sheetData[[sheet]] <<- NULL
   hyperlinks[[sheet]] <<- NULL
-  sheetOrder <<- c(sheetOrder[sheetOrder < sheet], sheetOrder[sheetOrder > sheet] - 1L)
+  styleInds[[sheet]] <<- NULL
+  
+  ## sheetOrder
+  toRemove <- which(sheetOrder == sheet)
+  sheetOrder[sheetOrder > sheet] <<- sheetOrder[sheetOrder > sheet] - 1L
+  sheetOrder <<- sheetOrder[-toRemove]
+  
   
   ## remove styleObjects
-  if(length(styleObjects) > 0){
-    styleObjects <<- lapply(styleObjects, function(x){
-      flag <- sapply(x$cells, function(s) s$sheet == sheetName)
-      if(all(flag))
-        return(NULL)
-      x$cells <- x$cells[!flag]
-      x
-    })
+  if(length(styleObjects) > 0)
+    styleObjects <<- styleObjects[unlist(lapply(styleObjects, "[[", "sheet"), use.names = FALSE) != sheetName]
+  
+  ## Need to remove reference from workbook.xml.rels to pivotCache
+  removeRels <- worksheets_rels[[sheet]][grepl("pivotTables", worksheets_rels[[sheet]])]
+  if(length(removeRels) > 0){
     
-    ## Now remove NULL values
-    styleObjects <<- styleObjects[!sapply(styleObjects, is.null)]
+    ## sheet rels links to a pivotTable file, the corresponding pivotTable_rels file links to the cacheDefn which is listing in workbook.xml.rels
+    ## remove reference to this file from the workbook.xml.rels
+    fileNo <- as.integer(unlist(regmatches(removeRels, gregexpr('(?<=pivotTable)[0-9]+(?=\\.xml)', removeRels, perl = TRUE))))
+    toRemove <- paste(sprintf("(pivotCacheDefinition%s\\.xml)", fileNo), collapse = "|")    
+
+    fileNo <- which(grepl(toRemove, pivotTables.xml.rels))
+    toRemove <- paste(sprintf("(pivotCacheDefinition%s\\.xml)", fileNo), collapse = "|")
+    
+    ## remove reference to file from workbook.xml.res
+    workbook.xml.rels <<- workbook.xml.rels[!grepl(toRemove, workbook.xml.rels)]
+    
   }
+  
+  ## As above for slicers
+  ## Need to remove reference from workbook.xml.rels to pivotCache
+  removeRels <- grepl("slicers", worksheets_rels[[sheet]])
+  if(any(removeRels))
+    workbook.xml.rels <<- workbook.xml.rels[!grepl(sprintf("(slicerCache%s\\.xml)", sheet), workbook.xml.rels)]
+  
+  
+  
+  
   
   ## wont't remove tables and then won't need to reassign table r:id's
   worksheets[[sheet]] <<- NULL
   worksheets_rels[[sheet]] <<- NULL
   
   ## drawing will always be the first relationship and printerSettings second
-  for(i in 1:(nSheets-1L))
-    worksheets_rels[[i]][1:2] <<- genBaseSheetRels(i)
+  if(nSheets > 1){
+    for(i in 1:(nSheets-1L))
+      worksheets_rels[[i]][1:2] <<- genBaseSheetRels(i)
+  }else{
+    worksheets_rels <<- list()
+  }
   
   
-  workbook$sheets <<- workbook$sheets[!grepl(sprintf('name="%s"', sheetName), workbook$sheets)]
+  ## remove sheet
+  sn <- unlist(lapply(workbook$sheets, function(x) regmatches(x, regexpr('(?<= name=")[^"]+', x, perl = TRUE))))
+  workbook$sheets <<- workbook$sheets[!sn %in% sheetName]
+  
   ## Reset rIds
-  for(i in (sheet+1L):nSheets)
-    workbook$sheets <<- gsub(paste0("rId", i), paste0("rId", i-1L), workbook$sheets)
+  if(nSheets > 1){
+    for(i in (sheet+1L):nSheets)
+      workbook$sheets <<- gsub(paste0("rId", i), paste0("rId", i-1L), workbook$sheets)
+  }else{
+    workbook$sheets <<- NULL
+  }
   
   ## Can remove highest sheet
   workbook.xml.rels <<- workbook.xml.rels[!grepl(sprintf("sheet%s.xml", nSheets), workbook.xml.rels)]
   freezePane[[sheet]] <<- NULL
   dataCount[[sheet]] <<- NULL
+  
+  ## definedNames
+  if(length(workbook$definedNames) > 0){
+    belongTo <- getDefinedNamesSheet(workbook$definedNames)
+    workbook$definedNames <<- workbook$definedNames[!belongTo %in% sheetName]
+  }
   
   invisible(1)
   
@@ -1302,9 +1584,9 @@ Workbook$methods(addDXFS = function(style){
   fillNode <- NULL
   
   if(!is.null(style$fill$fillFg) | !is.null(style$fill$fillBg))
-    dxf <- paste0(dxf, createFillNode(style$fill))
+    dxf <- paste0(dxf, createFillNode(style))
   
-  if(any(style$borderLeft, style$borderRight, style$borderTop, style$borderBottom))
+  if(any(!is.null(c(style$borderLeft, style$borderRight, style$borderTop, style$borderBottom))))
     dxf <- paste0(dxf, createBorderNode(style))
   
   dxf <- paste(dxf, "</dxf>")
@@ -1319,7 +1601,9 @@ Workbook$methods(addDXFS = function(style){
 
 
 
-Workbook$methods(conditionalFormatCell = function(sheet, startRow, endRow, startCol, endCol, dxfId, formula, type){
+
+
+Workbook$methods(conditionalFormatting = function(sheet, startRow, endRow, startCol, endCol, dxfId, formula, type, values){
   
   sheet = validateSheet(sheet)
   sqref <- paste(getCellRefs(data.frame("x" = c(startRow, endRow), "y" = c(startCol, endCol))), collapse = ":")
@@ -1332,13 +1616,49 @@ Workbook$methods(conditionalFormatCell = function(sheet, startRow, endRow, start
   
   nms <- c(names(worksheets[[sheet]]$conditionalFormatting), sqref)
   
-  if(type == "expression"){
+  if(type == "colorScale"){
     
-    cfRule <- sprintf('<cfRule type="expression" dxfId="%s" priority="1"><formula>%s</formula></cfRule>', dxfId, formula)
+    ## formula contains the colours
+    ## values contains numerics or is NULL
+    ## dxfId is ignored
+    
+    if(is.null(values)){
+      
+      if(length(formula) == 2L){
+        cfRule <- sprintf('<cfRule type="colorScale" priority="1"><colorScale>
+                             <cfvo type="min"/><cfvo type="max"/>
+                             <color rgb="%s"/><color rgb="%s"/>
+                           </colorScale></cfRule>', formula[[1]], formula[[2]])
+      }else{
+        cfRule <- sprintf('<cfRule type="colorScale" priority="1"><colorScale>
+                             <cfvo type="min"/><cfvo type="percentile" val="50"/><cfvo type="max"/>
+                             <color rgb="%s"/><color rgb="%s"/><color rgb="%s"/>
+                           </colorScale></cfRule>', formula[[1]], formula[[2]], formula[[3]])
+      }
+      
+    }else{
+      
+      if(length(formula) == 2L){
+        cfRule <- sprintf('<cfRule type="colorScale" priority="1"><colorScale>
+                            <cfvo type="num" val="%s"/><cfvo type="num" val="%s"/>
+                            <color rgb="%s"/><color rgb="%s"/>
+                           </colorScale></cfRule>', values[[1]], values[[2]], formula[[1]], formula[[2]])
+      }else{
+        cfRule <- sprintf('<cfRule type="colorScale" priority="1"><colorScale>
+                            <cfvo type="num" val="%s"/><cfvo type="num" val="%s"/><cfvo type="num" val="%s"/>
+                            <color rgb="%s"/><color rgb="%s"/><color rgb="%s"/>
+                           </colorScale></cfRule>', values[[1]], values[[2]], values[[3]], formula[[1]], formula[[2]], formula[[3]])
+      }
+      
+    }
+    
     
   }else if(type == "dataBar"){
     
-    if(length(formula) == 2){
+    # forumula is a vector of colours of length 1 or 2
+    # values is NULL or a numeric vector of equal length as formula
+    
+    if(length(formula) == 2L){
       negColour <- formula[[1]]
       posColour <- formula[[2]]
     }else{
@@ -1347,16 +1667,46 @@ Workbook$methods(conditionalFormatCell = function(sheet, startRow, endRow, start
     }
     
     guid <- paste0("F7189283-14F7-4DE0-9601-54DE9DB", 40000L + length(worksheets[[sheet]]$extLst))
-    cfRule <- sprintf('<cfRule type="dataBar" priority="1"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="%s"/></dataBar><extLst><ext uri="{B025F937-C7B1-47D3-B67F-A62EFF666E3E}" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"><x14:id>{%s}</x14:id></ext></extLst></cfRule>', posColour, guid)
-    worksheets[[sheet]]$extLst <<- c(worksheets[[sheet]]$extLst, genExtLst(guid, sqref, posColour, negColour))
     
-  }else if(length(formula) == 2L){
+    if(is.null(values)){
+      
+      cfRule <- sprintf('<cfRule type="dataBar" priority="1"><dataBar>
+                          <cfvo type="min"/><cfvo type="max"/>
+                          <color rgb="%s"/>
+                          </dataBar>
+                          <extLst><ext uri="{B025F937-C7B1-47D3-B67F-A62EFF666E3E}" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"><x14:id>{%s}</x14:id></ext></extLst></cfRule>', posColour, guid)
+      
+    }else{
+      
+      cfRule <- sprintf('<cfRule type="dataBar" priority="1"><dataBar>
+                            <cfvo type="num" val="%s"/><cfvo type="num" val="%s"/>
+                            <color rgb="%s"/>
+                            </dataBar>
+                            <extLst><ext uri="{B025F937-C7B1-47D3-B67F-A62EFF666E3E}" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main">
+                            <x14:id>{%s}</x14:id></ext></extLst></cfRule>', values[[1]], values[[2]], posColour, guid)
+      
+    }
     
-    cfRule <- sprintf('<cfRule type="colorScale" priority="1"><colorScale><cfvo type="min"/><cfvo type="max"/><color rgb="%s"/><color rgb="%s"/></colorScale></cfRule>', formula[[1]], formula[[2]])
+    worksheets[[sheet]]$extLst <<- c(worksheets[[sheet]]$extLst, genExtLst(guid, sqref, posColour, negColour, values = values))
     
-  }else{
     
-    cfRule <- sprintf('<cfRule type="colorScale" priority="1"><colorScale><cfvo type="min"/><cfvo type="percentile" val="50"/><cfvo type="max"/><color rgb="%s"/><color rgb="%s"/><color rgb="%s"/></colorScale></cfRule>', formula[[1]], formula[[2]], formula[[3]])
+  }else if(type == "expression"){
+    
+    cfRule <- sprintf('<cfRule type="expression" dxfId="%s" priority="1"><formula>%s</formula></cfRule>', dxfId, formula)
+    
+    
+  }else if(type == "duplicatedValues"){
+    
+    cfRule <- sprintf('<cfRule type="duplicateValues" dxfId="%s" priority="1"/>', dxfId)
+    
+    
+    
+  }else if(type == "containsText"){
+    
+    cfRule <- sprintf('<cfRule type="containsText" dxfId="%s" priority="1" operator="containsText" text="%s">
+                        	<formula>NOT(ISERROR(SEARCH("%s", %s)))</formula>
+                       </cfRule>', dxfId, values, values, unlist(strsplit(sqref, split = ":"))[[1]])
+    
   }
   
   worksheets[[sheet]]$conditionalFormatting <<- append(worksheets[[sheet]]$conditionalFormatting, cfRule)              
@@ -1539,59 +1889,87 @@ Workbook$methods(preSaveCleanUp = function(){
   ## Tables from r:id 3 to nTables+3 - 1
   ## HyperLinks from nTables+3 to nTables+3+nHyperLinks-1
   
-  nSheets <- length(worksheets)
+  sheetRIds <- as.integer(unlist(regmatches(workbook$sheets, gregexpr('(?<=r:id="rId)[0-9]+', workbook$sheets, perl = TRUE))))
+  
+  nSheets <- length(sheetRIds)
   nThemes <- length(theme)
   nExtRefs <- length(externalLinks)
   nPivots <- length(pivotDefinitions)
   
   ## add a worksheet if none added
   if(nSheets == 0){
-    warning("Workbook does not contain any worksheets. A worksheet will be added.")
+    warning("Workbook does not contain any worksheets. A worksheet will be added.", call. = FALSE)
     .self$addWorksheet("Sheet 1")
     nSheets <- 1L
   }
   
-  ## Assign relationship Ids  
-  nChildren <- 1:length(workbook.xml.rels)
-  splitRels <- strsplit(workbook.xml.rels, split = " ")
-  nms <- lapply(splitRels, function(x) gsub("(.*)=(.*)", "\\1", x[2:length(x)]))
-  rAttrs <- lapply(splitRels, function(x) gsub("/>$", "", gsub('(.*)="(.*)"', "\\2", x[2:length(x)])))   
-  rAttrs <- lapply(nChildren, function(i) {names(rAttrs[[i]]) <- nms[[i]]; return(rAttrs[[i]])})
-  
-  rIds <- paste0("rId", nChildren)
-  targets <- sapply(rAttrs, "[[", "Target")
-  
-  ## Reorderinf of workbook.xml.rels
-  sheetInds <- which(targets %in% sprintf("worksheets/sheet%s.xml", 1:nSheets))
-  sheetNumbers <- as.integer(gsub("[^0-9]", "", targets[sheetInds], perl = TRUE))
-  sheetInds <- sheetInds[order(sheetNumbers)]  ## make sure sheets will be in order
   
   ## get index of each child element for ordering
-  stylesInd <- which(targets == "styles.xml")
-  themeInd <- which(targets %in% sprintf("theme/theme%s.xml", 1:nThemes))
-  connectionsInd <- which(targets %in% "connections.xml")
+  sheetInds <- which(grepl("worksheets/sheet[0-9]+\\.xml", workbook.xml.rels))
+  stylesInd <- which(grepl("styles\\.xml", workbook.xml.rels))
+  themeInd <- which(grepl("theme/theme[0-9]+.xml", workbook.xml.rels))
+  connectionsInd <- which(grepl("connections.xml", workbook.xml.rels))
+  extRefInds <- which(grepl("externalLinks/externalLink[0-9]+.xml", workbook.xml.rels))
+  sharedStringsInd <- which(grepl("sharedStrings.xml", workbook.xml.rels))
+  tableInds <- which(grepl("table[0-9]+.xml", workbook.xml.rels))
   
-  extRefInds <- which(targets %in% sprintf("externalLinks/externalLink%s.xml", 1:nExtRefs))
-  sharedStringsInd <- which(targets == "sharedStrings.xml")
-  tableInds <- which(grepl("table[0-9]+.xml", targets))
-  pivotNode <- workbook.xml.rels[which(targets %in% sprintf("pivotCache/pivotCacheDefinition%s.xml", 1:nPivots))] ## don't want to re-assign rIds for pivot tables
+  
+  ## Reordering of workbook.xml.rels
+  ## don't want to re-assign rIds for pivot tables or slicer caches
+  pivotNode <- workbook.xml.rels[grepl("pivotCache/pivotCacheDefinition[0-9].xml", workbook.xml.rels)]
+  slicerNode <- workbook.xml.rels[which(grepl("slicerCache[0-9]+.xml", workbook.xml.rels))]
   
   ## Reorder children of workbook.xml.rels
   workbook.xml.rels <<- workbook.xml.rels[c(sheetInds, extRefInds, themeInd, connectionsInd, stylesInd, sharedStringsInd, tableInds)]
+  
   
   ## Re assign rIds to children of workbook.xml.rels
   workbook.xml.rels <<- unlist(lapply(1:length(workbook.xml.rels), function(i) {
     gsub('(?<=Relationship Id="rId)[0-9]+', i, workbook.xml.rels[[i]], perl = TRUE)
   }))
   
-  workbook.xml.rels <<- c(workbook.xml.rels, pivotNode)
+  workbook.xml.rels <<- c(workbook.xml.rels, pivotNode, slicerNode)
+  
+  
+  
+  
+  if(!is.null(vbaProject))
+    workbook.xml.rels <<- c(workbook.xml.rels, sprintf('<Relationship Id="rId%s" Type="http://schemas.microsoft.com/office/2006/relationships/vbaProject" Target="vbaProject.bin"/>', 1L + length(workbook.xml.rels)))
   
   ## Reassign rId to workbook sheet elements, (order sheets by sheetId first)
-  sId <- as.integer(unlist(regmatches(workbook$sheets, gregexpr('(?<=sheetId=")[0-9]+', workbook$sheets, perl = TRUE))))
-  workbook$sheets <<- sapply(order(sId), function(i) gsub('(?<=id="rId)[0-9]+', i, workbook$sheets[[i]], perl = TRUE))
-  workbook$sheets <<- sapply(1:nSheets, function(i) gsub('(?<=sheetId=")[0-9]+', i, workbook$sheets[[i]], perl = TRUE))
-  if(!is.null(sheetOrder))
+  workbook$sheets <<- unlist(lapply(1:length(workbook$sheets), function(i) {
+    gsub('(?<= r:id="rId)[0-9]+', i, workbook$sheets[[i]], perl = TRUE)
+  }))
+  
+  ## re-order worksheets if need to
+  if(any(sheetOrder != 1:nSheets))
     workbook$sheets <<- workbook$sheets[sheetOrder]
+  
+  ## re-assign tabSelected
+  worksheets[[1]]$sheetViews <<- sub('( tabSelected="0")|( tabSelected="false")', ' tabSelected="1"', worksheets[[1]]$sheetViews, ignore.case = TRUE)
+  if(nSheets > 1){
+    for(i in 2:nSheets)
+      worksheets[[i]]$sheetViews <<- sub(' tabSelected="(1|true|false|0)"', ' tabSelected="0"', worksheets[[i]]$sheetViews, ignore.case = TRUE)
+  }
+  
+  
+  if(length(workbook$definedNames) > 0){
+    
+    sheetNames <- names(worksheets)[sheetOrder]
+    
+    belongTo <- getDefinedNamesSheet(workbook$definedNames)
+    
+    ## sheetNames is in re-ordered order (order it will be displayed)
+    newId <- match(belongTo, sheetNames) - 1L
+    oldId <- as.numeric(regmatches(workbook$definedNames, regexpr('(?<= localSheetId=")[0-9]+', workbook$definedNames, perl = TRUE)))
+    
+    for(i in 1:length(workbook$definedNames))
+      workbook$definedNames[[i]] <<- gsub(sprintf('localSheetId=\"%s\"', oldId[i]), sprintf('localSheetId=\"%s\"', newId[i]), workbook$definedNames[[i]])
+    
+  }
+  
+  
+  
   
   ## update workbook r:id to match reordered workbook.xml.rels externalLink element
   if(length(extRefInds) > 0){
@@ -1603,25 +1981,50 @@ Workbook$methods(preSaveCleanUp = function(){
   
   ## styles
   numFmtIds <- 50000L
+  styleInds <<- lapply(1:length(worksheets), function(i){
+    y <- rep.int(NA, length(sheetData[[i]]))
+    names(y) <- unlist(lapply(sheetData[[i]], "[[", "r"), use.names = FALSE)
+    return(y)
+  })
   
-  i <- 1;
   for(x in styleObjects){
-    if(length(x$cells) > 0){
+    if(length(x$rows) > 0 & length(x$cols) > 0){
       
-      this.sty <- x$style$copy()    
-      if(this.sty$numFmt$numFmtId == 9999){
-        this.sty$numFmt$numFmtId <- numFmtIds
-        numFmtIds <- numFmtIds + 1L
+      this.sty <- x$style$copy()  
+      
+      if(!is.null(this.sty$numFmt)){
+        if(this.sty$numFmt$numFmtId == 9999){
+          this.sty$numFmt$numFmtId <- numFmtIds
+          numFmtIds <- numFmtIds + 1L
+        }
       }
       
-      sId <- .self$updateStyles(this.sty)
-      for(r in x$cells)
-        .self$updateCellStyles(sheet = r$sheet, rows = r$rows, cols = r$cols, sId)
+      ## convert sheet name to index
+      sheet <- which(names(worksheets) == x$sheet)
+      sId <- .self$updateStyles(this.sty) ## this creates the XML for styles.XML
       
-      styleObjects[[i]]$id <<- sId
+      ## In here we create any styleInds that don't yet have a sheetData
+      refsToStyle <- paste0(.Call('openxlsx_convert2ExcelRef', PACKAGE = 'openxlsx', x$cols, LETTERS), x$rows)
+      styleInds[[sheet]][names(styleInds[[sheet]]) %in% refsToStyle] <<- sId
+      
+      toAppend <- refsToStyle[!refsToStyle %in% names(styleInds[[sheet]])]
+      if(length(toAppend) > 0){
+        tmp <- rep.int(sId, length(toAppend))
+        names(tmp) <- toAppend
+        styleInds[[sheet]] <<- c(styleInds[[sheet]], tmp)
+        
+        ## Now append new cells to sheetData - incremenet dataCount so sorting will take place
+        newCells <- .Call("openxlsx_buildCellList", toAppend , rep(as.character(NA), length(toAppend)) , rep(as.character(NA), length(toAppend)), PACKAGE="openxlsx")
+        names(newCells) <- gsub("[A-Z]", "", toAppend)
+        sheetData[[sheet]] <<- append(sheetData[[sheet]], newCells)
+        dataCount[[sheet]] <<- dataCount[[sheet]] + 1L
+        
+      }
+      
     }
-    i <- i + 1;
+    
   }
+  
   
   ## Make sure all rowHeights have rows, if not append them!
   for(i in 1:length(worksheets)){
@@ -1644,6 +2047,98 @@ Workbook$methods(preSaveCleanUp = function(){
   
 })
 
+
+
+Workbook$methods(addStyle = function(sheet, style, rows, cols, stack){
+  
+  sheet <- names(worksheets)[[sheet]]
+  
+  if(length(styleObjects) == 0){
+    
+    styleObjects <<- list(list(style = style,
+                               sheet =  sheet,
+                               rows = rows,
+                               cols = cols))   
+  }else if(stack){
+    
+    
+    nStyles <- length(styleObjects)
+    
+    ## ********** Assume all styleObjects cells have one a single worksheet **********
+    ## Loop through existing styleObjects
+    newInds <- 1:length(rows)
+    keepStyle <- rep(TRUE, nStyles) 
+    for(i in 1:nStyles){
+      
+      if(sheet == styleObjects[[i]]$sheet){
+        
+        ## Now check rows and cols intersect
+        ## toRemove are the elements that will be used in the merge
+        ## mergeInds are the intersection of the two styles that will need to merge
+        ## newInds are inds that don't exist in the current - this cumulates until the end to see if any are new
+        
+        toRemoveInds <- which(styleObjects[[i]]$rows %in% rows & styleObjects[[i]]$cols %in% cols) 
+        #which(!is.na(match(styleObjects[[i]]$rows, rows)) & !is.na(match(styleObjects[[i]]$cols, cols)))
+        mergeInds <- which(rows %in% styleObjects[[i]]$rows & cols %in% styleObjects[[i]]$cols)
+        newInds <- newInds[!newInds %in% mergeInds]
+        
+        if(length(toRemoveInds) > 0){
+          
+          ## remove these from style object
+          styleObjects[[i]]$rows <<- styleObjects[[i]]$rows[-toRemoveInds]
+          styleObjects[[i]]$cols <<- styleObjects[[i]]$cols[-toRemoveInds]
+          
+          if(length(styleObjects[[i]]$rows) == 0 | length(styleObjects[[i]]$cols) == 0)
+            keepStyle[[i]] <- FALSE
+          
+          
+        }
+        
+        ## append style object for intersecting cells
+        if(length(mergeInds) > 0){
+          
+          keepStyle <- c(keepStyle, TRUE)
+          
+          styleObjects <<- append(styleObjects, list(list(style = mergeStyle(styleObjects[[i]]$style, newStyle = style),
+                                                          sheet =  sheet,
+                                                          rows = rows[mergeInds],
+                                                          cols = cols[mergeInds])))        
+        }
+        
+        
+      } ## if sheet == styleObjects[[i]]$sheet
+      
+      
+    } ## End of loop through styles
+    
+    ## remove any styles that no longer have any affect
+    styleObjects <<- styleObjects[keepStyle]
+    
+    ## append style object for non-intersecting cells
+    if(length(newInds) > 0){
+      
+      styleObjects <<- append(styleObjects, list(list(style = style,
+                                                      sheet =  sheet,
+                                                      rows = rows[newInds],
+                                                      cols = cols[newInds])))
+      
+    }
+    
+    
+  }else{ ## else we are not stacking
+    
+    styleObjects <<- append(styleObjects, list(list(style = style,
+                                                    sheet =  sheet,
+                                                    rows = rows,
+                                                    cols = cols)))
+    
+    
+  } ## End if(length(styleObjects) > 0) else if(stack) {}
+  
+  
+  
+  
+})
 
 
 
@@ -2180,3 +2675,57 @@ openxlsxFontSizeLookupTableBold <-
               "wide.latin"= c(2.25, 2.42875, 2.875, 3.07125, 3.21375, 3.69625, 3.83875, 3.9825, 4.32125, 4.6075, 4.7675, 5.08875, 5.3925, 5.57125, 5.875, 6.19625, 6.3575, 6.6425, 6.9825, 7.125, 7.46375, 7.6075, 7.8925, 8.2325, 8.375, 8.71375, 9, 9.16, 9.4825))
 
 
+
+
+
+
+
+
+
+## TO BE DEPRECATED
+Workbook$methods(conditionalFormatCell = function(sheet, startRow, endRow, startCol, endCol, dxfId, formula, type){
+  
+  sheet = validateSheet(sheet)
+  sqref <- paste(getCellRefs(data.frame("x" = c(startRow, endRow), "y" = c(startCol, endCol))), collapse = ":")
+  
+  ## Increment priority of conditional formatting rule
+  if(length((worksheets[[sheet]]$conditionalFormatting)) > 0){
+    for(i in length(worksheets[[sheet]]$conditionalFormatting):1)
+      worksheets[[sheet]]$conditionalFormatting[[i]] <<- gsub('(?<=priority=")[0-9]+', i+1L, worksheets[[sheet]]$conditionalFormatting[[i]], perl = TRUE)
+  }
+  
+  nms <- c(names(worksheets[[sheet]]$conditionalFormatting), sqref)
+  
+  if(type == "expression"){
+    
+    cfRule <- sprintf('<cfRule type="expression" dxfId="%s" priority="1"><formula>%s</formula></cfRule>', dxfId, formula)
+    
+  }else if(type == "dataBar"){
+    
+    if(length(formula) == 2){
+      negColour <- formula[[1]]
+      posColour <- formula[[2]]
+    }else{
+      posColour <- formula
+      negColour <- "FFFF0000"
+    }
+    
+    guid <- paste0("F7189283-14F7-4DE0-9601-54DE9DB", 40000L + length(worksheets[[sheet]]$extLst))
+    cfRule <- sprintf('<cfRule type="dataBar" priority="1"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="%s"/></dataBar><extLst><ext uri="{B025F937-C7B1-47D3-B67F-A62EFF666E3E}" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"><x14:id>{%s}</x14:id></ext></extLst></cfRule>', posColour, guid)
+    
+  }else if(length(formula) == 2L){
+    
+    cfRule <- sprintf('<cfRule type="colorScale" priority="1"><colorScale><cfvo type="min"/><cfvo type="max"/><color rgb="%s"/><color rgb="%s"/></colorScale></cfRule>', formula[[1]], formula[[2]])
+    
+  }else{
+    
+    cfRule <- sprintf('<cfRule type="colorScale" priority="1"><colorScale><cfvo type="min"/><cfvo type="percentile" val="50"/><cfvo type="max"/><color rgb="%s"/><color rgb="%s"/><color rgb="%s"/></colorScale></cfRule>', formula[[1]], formula[[2]], formula[[3]])
+  }
+  
+  worksheets[[sheet]]$conditionalFormatting <<- append(worksheets[[sheet]]$conditionalFormatting, cfRule)              
+  
+  names(worksheets[[sheet]]$conditionalFormatting) <<- nms
+  
+  invisible(0)
+  
+})

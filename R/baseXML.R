@@ -50,12 +50,13 @@ genBaseWorkbook.xml.rels <- function(){
 genBaseWorkbook <- function(){
   
   list(workbookPr = '<workbookPr date1904="false"/>',
-       bookViews = '<bookViews><workbookView activeTab="0"/></bookViews>',
+       bookViews = 	'<bookViews><workbookView xWindow="0" yWindow="0" windowWidth="13125" windowHeight="6105"/></bookViews>',
        sheets = NULL,
        externalReferences = NULL,
        definedNames = NULL,
        calcPr = NULL,
-       pivotCaches = NULL
+       pivotCaches = NULL,
+       extLst = NULL
   )
   
 }
@@ -68,7 +69,13 @@ genBaseSheet <- function(sheetName,
                          oddHeader, oddFooter, evenHeader, evenFooter, firstHeader, firstFooter){
   
   if(!is.null(tabColour))
-    tabColour <- sprintf('<tabColor rgb="%s"/>', tabColour)
+    tabColour <- sprintf('<sheetPr><tabColor rgb="%s"/></sheetPr>', tabColour)
+  
+  if(zoom < 10){
+    zoom <- 10
+  }else if(zoom > 400){
+    zoom <- 400
+  }
   
   naToNULLList <- function(x){
     lapply(x, function(x) {
@@ -121,7 +128,7 @@ genBaseSheetRels <- function(sheetInd){
   
 }
 
-genBaseStyleSheet <- function(dxfs = NULL){
+genBaseStyleSheet <- function(dxfs = NULL, tableStyles = NULL, extLst = NULL){
   
   list(
     
@@ -141,6 +148,10 @@ genBaseStyleSheet <- function(dxfs = NULL){
     cellStyles = c('<cellStyle name="Normal" xfId="0" builtinId="0"/>'),
     
     dxfs = dxfs,
+    
+    tableStyles = tableStyles,
+    
+    extLst = extLst,
     
     indexedColors = NULL
   )
@@ -359,12 +370,29 @@ genPrinterSettings <- function(){
 }
 
 
-genExtLst <- function(guid, sqref, posColour, negColour){
-  sprintf('<ext uri="{78C0D931-6437-407d-A8EE-F0AAD7539E65}" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"><x14:conditionalFormattings><x14:conditionalFormatting xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main">
-    <x14:cfRule type="dataBar" id="{%s}">
-    <x14:dataBar minLength="0" maxLength="100" border="1" negativeBarBorderColorSameAsPositive="0">
-    <x14:cfvo type="autoMin"/><x14:cfvo type="autoMax"/><x14:borderColor rgb="%s"/><x14:negativeFillColor rgb="%s"/><x14:negativeBorderColor rgb="%s"/><x14:axisColor rgb="FF000000"/>
-    </x14:dataBar></x14:cfRule><xm:sqref>%s</xm:sqref></x14:conditionalFormatting></x14:conditionalFormattings></ext>', guid, posColour, negColour, negColour, sqref)
+genExtLst <- function(guid, sqref, posColour, negColour, values){
+  
+  if(is.null(values)){
+    
+    xml <- sprintf('<ext uri="{78C0D931-6437-407d-A8EE-F0AAD7539E65}" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"><x14:conditionalFormattings><x14:conditionalFormatting xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main">
+                      <x14:cfRule type="dataBar" id="{%s}">
+                      <x14:dataBar minLength="0" maxLength="100" border="1" negativeBarBorderColorSameAsPositive="0">
+                      <x14:cfvo type="autoMin"/><x14:cfvo type="autoMax"/><x14:borderColor rgb="%s"/><x14:negativeFillColor rgb="%s"/><x14:negativeBorderColor rgb="%s"/><x14:axisColor rgb="FF000000"/>
+                      </x14:dataBar></x14:cfRule><xm:sqref>%s</xm:sqref></x14:conditionalFormatting></x14:conditionalFormattings></ext>', guid, posColour, negColour, negColour, sqref)
+  }else{
+    
+    xml <- sprintf('<ext uri="{78C0D931-6437-407d-A8EE-F0AAD7539E65}" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"><x14:conditionalFormattings><x14:conditionalFormatting xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main">
+                      <x14:cfRule type="dataBar" id="{%s}">
+                      <x14:dataBar minLength="0" maxLength="100" border="1" negativeBarBorderColorSameAsPositive="0">
+                      <x14:cfvo type="num"><xm:f>%s</xm:f></x14:cfvo><x14:cfvo type="num"><xm:f>%s</xm:f></x14:cfvo>
+                      <x14:borderColor rgb="%s"/><x14:negativeFillColor rgb="%s"/><x14:negativeBorderColor rgb="%s"/><x14:axisColor rgb="FF000000"/>
+                      </x14:dataBar></x14:cfRule><xm:sqref>%s</xm:sqref></x14:conditionalFormatting></x14:conditionalFormattings></ext>', guid, values[[1]], values[[2]], posColour, negColour, negColour, sqref)
+    
+    
+    
+  }
+  
+  return(xml)
   
 }
 
@@ -378,3 +406,36 @@ contentTypePivotXML <- function(i){
     
 }
 
+contentTypeSlicerCacheXML <- function(i){
+  
+  c(sprintf('<Override PartName="/xl/slicerCaches/slicerCache%s.xml" ContentType="application/vnd.ms-excel.slicerCache+xml"/>', i),
+    sprintf('<Override PartName="/xl/slicers/slicer%s.xml" ContentType="application/vnd.ms-excel.slicer+xml"/>', i)
+  )
+  
+}
+
+
+genBaseSlicerXML <- function(){
+  '<ext uri="{A8765BA9-456A-4dab-B4F3-ACF838C121DE}" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main">
+    <x14:slicerList>
+    <x14:slicer r:id="rId0"/>
+      </x14:slicerList>
+      </ext>'
+}
+
+
+genSlicerCachesExtLst <- function(i){
+  
+  paste0(
+    '<extLst>
+    <ext uri=\"{BBE1A952-AA13-448e-AADC-164F8A28A991}\" xmlns:x14=\"http://schemas.microsoft.com/office/spreadsheetml/2009/9/main\">
+    <x14:slicerCaches>',
+    
+    paste(sprintf('<x14:slicerCache r:id="rId%s"/>', i), collapse = ""),
+    
+    '</x14:slicerCaches>
+    </ext>
+    </extLst>')
+  
+  
+}

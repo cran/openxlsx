@@ -10,7 +10,7 @@ using namespace std;
 // [[Rcpp::export]]
 IntegerVector RcppConvertFromExcelRef( CharacterVector x ){
   
-  // This function converts the Excel column letter to a integer
+  // This function converts the Excel column letter to an integer
   
   std::vector<std::string> r = as<std::vector<std::string> >(x);
   int n = r.size();
@@ -62,25 +62,25 @@ SEXP calcColumnWidths(List sheetData, std::vector<std::string> sharedStrings, In
   int nLen;
   
   std::vector<std::string> tmp;
-  
+  //** tmp[2] is element "v" of sheetData
   
   // get widths of all values
   for(size_t i = 0; i < n; i++){
     
-    tmp = sheetData[i];
+    tmp = as<std::vector<std::string> >(sheetData[i]);
     if(tmp[1] == "s"){
-      v[i] = sharedStrings[atoi(tmp[3].c_str())].length() - 16;
+      v[i] = sharedStrings[atoi(tmp[2].c_str())].length() - 16; //-16 for shared string tags around text
     }else{
-      nLen = tmp[3].length();
-      v[i] = min(nLen, 11);
+      nLen = tmp[2].length();
+      v[i] = min(nLen, 11); // For numerics - max width is 11
       
     }
     
     r[i] = tmp[0];
-      
+    
   }
   
-
+  
   // get column for each value
   IntegerVector colNumbers = RcppConvertFromExcelRef(r);
   IntegerVector colGroups = match(colNumbers, autoColumns);
@@ -90,7 +90,6 @@ SEXP calcColumnWidths(List sheetData, std::vector<std::string> sharedStrings, In
   colNumbers = colNumbers[notNA];
   v = v[notNA];
   widths = widths[notNA];
-  
   IntegerVector uCols = sort_unique(colNumbers);
   
   size_t nUnique = uCols.size();
@@ -106,16 +105,14 @@ SEXP calcColumnWidths(List sheetData, std::vector<std::string> sharedStrings, In
     columnWidths[i] = max(wTmp * thisColWidths / baseFontCharWidth); 
   }
   
-  
-  
   columnWidths[columnWidths < minW] = minW;
   columnWidths[columnWidths > maxW] = maxW;    
-
+  
   // assign column names
   columnWidths.attr("names") = uCols;
   
   return(wrap(columnWidths));
-    
+  
 }
 
 
@@ -132,11 +129,38 @@ std::string cppReadFile(std::string xmlFile){
   file.open(xmlFile.c_str());
   
   while (file >> buf)
-  xml += buf + ' ';
+    xml += buf + ' ';
   
   return xml;
 }
 
+// [[Rcpp::export]]
+std::string cppReadFile2(std::string xmlFile){
+  
+//  std::string buf;
+//  std::string xml;
+  ifstream file;
+  file.open(xmlFile.c_str());
+  std::vector<std::string> lines;
+  
+  std::string line;
+  while ( std::getline(file, line) )
+  {
+    // skip empty lines:
+    if (line.empty())
+      continue;
+    
+    lines.push_back(line);
+  }
+  
+  line = "";
+  int n = lines.size();
+  for(int i = 0;i < n; ++i)
+    line += lines[i] + "\n";  
+  
+
+  return line;
+}
 
 
 // [[Rcpp::export]]
@@ -175,8 +199,13 @@ SEXP getVals(CharacterVector x){
 // [[Rcpp::export]]
 SEXP getNodes(std::string xml, std::string tagIn){
   
+  // This function loops over all characters in xml, looking for tag
+  // tag should look liked <tag>
+  // tagEnd is then generated to be <tag/>
+  
+  
   if(xml.length() == 0)
-  return wrap(NA_STRING);
+    return wrap(NA_STRING);
   
   xml = " " + xml;
   std::vector<std::string> r;
@@ -194,7 +223,7 @@ SEXP getNodes(std::string xml, std::string tagIn){
     endPos = xml.find(tagEnd, pos+k);
     
     if((pos == std::string::npos) | (endPos == std::string::npos))
-    break;
+      break;
     
     r.push_back(xml.substr(pos, endPos-pos+l).c_str());
     
@@ -211,7 +240,7 @@ SEXP getChildlessNode(std::string xml, std::string tag){
   
   size_t k = tag.length();
   if(xml.length() == 0)
-  return wrap(NA_STRING);
+    return wrap(NA_STRING);
   
   xml = " " + xml;
   
@@ -224,7 +253,7 @@ SEXP getChildlessNode(std::string xml, std::string tag){
     
     pos = xml.find(tag, pos+1);    
     if(pos == std::string::npos)
-    break;
+      break;
     
     endPos = xml.find(tagEnd, pos+k);
     
@@ -245,7 +274,7 @@ SEXP getAttr(CharacterVector x, std::string tag){
   size_t k = tag.length();
   
   if(n == 0)
-  return wrap(-1);
+    return wrap(-1);
   
   std::string xml;
   CharacterVector r(n);
@@ -278,7 +307,7 @@ SEXP childrenCounter(CharacterVector x){
   
   size_t n = x.size();
   if(n == 0)
-  return wrap(0);
+    return wrap(0);
   
   std::string xml;
   IntegerVector nChildren(n);
@@ -347,7 +376,7 @@ SEXP getCellTypes(CharacterVector x){
   int n = x.size();
   
   if(n == 0)
-  return wrap(-1);
+    return wrap(-1);
   
   std::string xml;
   CharacterVector t(n);
@@ -381,7 +410,7 @@ SEXP getCells(CharacterVector x){
   int n = x.size();
   
   if(n == 0)
-  return wrap(-1);
+    return wrap(-1);
   
   std::string xml;
   CharacterVector r(n);
@@ -400,7 +429,7 @@ SEXP getCells(CharacterVector x){
     endPos = xml.find(tagEnd, pos+3);
     
     if(endPos == std::string::npos)
-    endPos = xml.find(tagEnd2, pos+3);
+      endPos = xml.find(tagEnd2, pos+3);
     
     r[i] = xml.substr(pos+3, endPos-pos-3).c_str();
     
@@ -417,7 +446,7 @@ SEXP getFunction(CharacterVector x){
   int n = x.size();
   
   if(n == 0)
-  return wrap(-1);
+    return wrap(-1);
   
   std::string xml;
   CharacterVector r(n);
@@ -460,7 +489,7 @@ SEXP getRefs(CharacterVector x, int startRow){
   int n = x.size();
   
   if(n == 0)
-  return wrap(-1);
+    return wrap(-1);
   
   std::string xml;
   CharacterVector r(n);
@@ -591,31 +620,31 @@ CharacterVector getSharedStrings2(CharacterVector x){
     pos = xml.find(ttag, 0); // find ttag      
     
     if(xml[pos+2] == '/'){
-       emptyStrs.push_back(i); //this should only ever grow to length 1
+      emptyStrs.push_back(i); //this should only ever grow to length 1
     }else{
       strs[i] = "";
       while(1){
-
+        
         if(xml[pos+2] == '/'){
-           emptyStrs.push_back(i); //this should only ever grow to length 1
+          emptyStrs.push_back(i); //this should only ever grow to length 1
           break;
         }else{
-      
+          
           pos = xml.find(tag, pos+1); // find where opening ttag ends
           endPos = xml.find(tagEnd, pos+1); // find where the node ends </t> (closing tag)
           strs[i] += xml.substr(pos+1, endPos-pos - 1).c_str(); 
           pos = xml.find(ttag, endPos); // find ttag    
-        
+          
           if(pos == std::string::npos)
             break;
-            
+          
         }  
       }
       
     }
     
     
-
+    
     
   }
   
@@ -636,7 +665,7 @@ List getNumValues(CharacterVector inFile, int n, std::string tagIn) {
   
   std::vector<std::string> tokens;
   while (file >> buf)
-  xml += buf;
+    xml += buf;
   
   std::string tag = tagIn;
   std::string tagEnd = tagIn.insert(1,"/");
@@ -708,26 +737,24 @@ List buildCellList( CharacterVector r, CharacterVector t, CharacterVector v) {
         
         cells[i] = CharacterVector::create(
           Named("r") = r[i],
-          Named("t") = t[i],
-          Named("s") = NA_STRING,
-          Named("v") = v[i],
-          Named("f") = NA_STRING); 
+                        Named("t") = t[i],
+                                      Named("v") = v[i],
+                                                    Named("f") = NA_STRING); 
       }else{
         
         
         cells[i] = CharacterVector::create(
           Named("r") = r[i],
-          Named("t") = NA_STRING,
-          Named("s") = NA_STRING,
-          Named("v") = NA_STRING,
-          Named("f") = NA_STRING); 
+                        Named("t") = NA_STRING,
+                        Named("v") = NA_STRING,
+                        Named("f") = NA_STRING); 
       }
+      
     }else{
       
       cells[i] = CharacterVector::create(
         Named("r") = NA_STRING,
         Named("t") = NA_STRING,
-        Named("s") = NA_STRING,
         Named("v") = NA_STRING,
         Named("f") = NA_STRING);  
     }
@@ -762,28 +789,25 @@ SEXP buildLoadCellList( CharacterVector r, CharacterVector t, CharacterVector v,
       
       cells[i] = CharacterVector::create(
         Named("r") = r[i],
-        Named("t") = t[i],
-        Named("s") = NA_STRING,
-        Named("v") = v[i],
-        Named("f") = f[i]); 
-        
-        
+                      Named("t") = t[i],
+                                    Named("v") = v[i],
+                                                  Named("f") = f[i]); 
+      
+      
     }else if(hasV[i]){
       
       cells[i] = CharacterVector::create(
         Named("r") = r[i],
-        Named("t") = t[i],
-        Named("s") = NA_STRING,
-        Named("v") = v[i],
-        Named("f") = NA_STRING); 
-        
+                      Named("t") = t[i],
+                                    Named("v") = v[i],
+                                                  Named("f") = NA_STRING); 
+      
     }else{ //only have s and r
-    cells[i] = CharacterVector::create(
-      Named("r") = r[i],
-      Named("t") = NA_STRING,
-      Named("s") = NA_STRING,
-      Named("v") = NA_STRING,
-      Named("f") = NA_STRING);
+      cells[i] = CharacterVector::create(
+        Named("r") = r[i],
+                      Named("t") = NA_STRING,
+                      Named("v") = NA_STRING,
+                      Named("f") = NA_STRING);
     }
   } // end of for loop
   
@@ -830,10 +854,9 @@ SEXP constructCellData(IntegerVector cols, std::vector<std::string> LETTERS, std
       names[c] = rows[i];
       cells[c] = CharacterVector::create(
         Named("r") = res[j] + rows[i],
-        Named("t") = t[c],
-        Named("s") = NA_STRING,
-        Named("v") = v[c]);
-        c++; 
+                                  Named("t") = t[c],
+                                                Named("v") = v[c]);
+      c++; 
     }
   }
   
@@ -896,13 +919,13 @@ SEXP ExcelConvertExpand(IntegerVector cols, std::vector<std::string> LETTERS, st
   CharacterVector names(n*nRows);
   size_t c = 0;
   for(int i=0; i < nRows; i++)
-  for(int j=0; j < n; j++){
-    r[c] = res[j] + rows[i];
-    names[c] = rows[i];
-    c++;
-  }
-  
-  r.attr("names") = names;
+    for(int j=0; j < n; j++){
+      r[c] = res[j] + rows[i];
+      names[c] = rows[i];
+      c++;
+    }
+    
+    r.attr("names") = names;
   return wrap(r) ;
   
 }
@@ -910,22 +933,22 @@ SEXP ExcelConvertExpand(IntegerVector cols, std::vector<std::string> LETTERS, st
 
 // [[Rcpp::export]]
 SEXP buildMatrixNumeric(NumericVector v, IntegerVector rowInd, IntegerVector colInd,
-CharacterVector colNames, int nRows, int nCols){
+                        CharacterVector colNames, int nRows, int nCols){
   
   int k = v.size();
   NumericMatrix m(nRows, nCols);
   std::fill(m.begin(), m.end(), NA_REAL);
   
   for(int i = 0; i < k; i++)
-  m(rowInd[i], colInd[i]) = v[i];
+    m(rowInd[i], colInd[i]) = v[i];
   
   List dfList(nCols);
   for(int i=0; i < nCols; ++i)
-  dfList[i] = m(_,i);
+    dfList[i] = m(_,i);
   
   std::vector<int> rowNames(nRows);
   for(int i = 0;i < nRows; ++i)
-  rowNames[i] = i+1;
+    rowNames[i] = i+1;
   
   dfList.attr("names") = colNames;
   dfList.attr("row.names") = rowNames;
@@ -938,82 +961,118 @@ CharacterVector colNames, int nRows, int nCols){
 
 
 // [[Rcpp::export]]
-SEXP buildMatrixMixed(CharacterVector v, IntegerVector rowInd, IntegerVector colInd,
-CharacterVector colNames, int nRows, int nCols, IntegerVector charCols){
+SEXP buildMatrixMixed(CharacterVector v,
+                      NumericVector vn,
+                      IntegerVector rowInd,
+                      IntegerVector colInd,
+                      CharacterVector colNames,
+                      int nRows,
+                      int nCols,
+                      IntegerVector charCols,
+                      IntegerVector dateCols,
+                      int originAdj){
   
   int k = v.size();
-  Rcpp::CharacterMatrix m(nRows, nCols);
+  CharacterMatrix m(nRows, nCols);
+  NumericMatrix mN(nRows, nCols);
+  
   std::fill(m.begin(), m.end(), NA_STRING);
+  std::fill(mN.begin(), mN.end(), NA_REAL);
+  
   
   // fill matrix
   for(int i = 0;i < k; i++){
     m(rowInd[i], colInd[i]) = v[i];
+    mN(rowInd[i], colInd[i]) = vn[i];
   }
   
-  List dfList(nCols);
-  LogicalVector naElements(nRows);  
+  // this will be the return data.frame
+  List dfList(nCols); 
   
-  for(int i=0; i < nCols; i++){
+  
+  // loop over each column and check type
+  for(int i = 0; i < nCols; i++){
     
     CharacterVector tmp(nRows);
-    for(int ri=0; ri < nRows; ri++)
-    tmp[ri] = m(ri,i);
+    
+    for(int ri = 0; ri < nRows; ri++)
+      tmp[ri] = m(ri,i);
     
     LogicalVector notNAElements = !is_na(tmp);
     
-    // if i in charCols
-    if (std::find(charCols.begin(), charCols.end(), i) != charCols.end()){ // If column is character class
-    
-    bool logCol = true;
-    for(int ri = 0; ri < nRows; ri++){
-      if(notNAElements[ri]){
-        if((m(ri, i) != "TRUE") & (m(ri, i) != "FALSE")){
-          logCol = false;
-          break;
-        }
-      }
-    }
     
     
-    if(logCol){
+    // If column is date class and no strings exist in column
+    if( (std::find(dateCols.begin(), dateCols.end(), i) != dateCols.end()) &
+        (std::find(charCols.begin(), charCols.end(), i) == charCols.end()) ){
       
-      LogicalVector logtmp(nRows);
+      // these are all dates and no characters --> safe to convert numerics
+      
+      DateVector datetmp(nRows);
       for(int ri=0; ri < nRows; ri++){
         if(!notNAElements[ri]){
-          logtmp[ri] = NA_LOGICAL; //IF TRUE, TRUE else FALSE
+          datetmp[ri] = NA_REAL; //IF TRUE, TRUE else FALSE
         }else{
-          logtmp[ri] = (tmp[ri] == "TRUE");
+          datetmp[ri] = Date(mN(ri,i) - originAdj);
         }
       }
-      dfList[i] = logtmp;
       
-    }else{
+      dfList[i] = datetmp;
       
-      dfList[i] = tmp;
       
-    }
-    
-    }else{ // else if column NOT character class
-    
-    
-    NumericVector ntmp(nRows);
-    for(int ri=0; ri < nRows; ri++){
-      if(notNAElements[ri]){
-        ntmp[ri] = atof(tmp[ri]); 
-      }else{
-        ntmp[ri] = NA_REAL; 
+      // date columns
+    }else if(std::find(charCols.begin(), charCols.end(), i) != charCols.end()){
+      
+      // determine if column is logical or date
+      bool logCol = true;
+      for(int ri = 0; ri < nRows; ri++){
+        if(notNAElements[ri]){
+          if((m(ri, i) != "TRUE") & (m(ri, i) != "FALSE")){
+            logCol = false;
+            break;
+          }
+        }
       }
-    }
-    
-    dfList[i] = ntmp;
-    
+      
+      if(logCol){
+        
+        LogicalVector logtmp(nRows);
+        for(int ri=0; ri < nRows; ri++){
+          if(!notNAElements[ri]){
+            logtmp[ri] = NA_LOGICAL; //IF TRUE, TRUE else FALSE
+          }else{
+            logtmp[ri] = (tmp[ri] == "TRUE");
+          }
+        }
+        
+        dfList[i] = logtmp;
+        
+      }else{
+        
+        dfList[i] = tmp;
+        
+      }
+      
+    }else{ // else if column NOT character class
+      
+      NumericVector ntmp(nRows);
+      for(int ri = 0; ri < nRows; ri++){
+        if(notNAElements[ri]){
+          ntmp[ri] = mN(ri, i); 
+        }else{
+          ntmp[ri] = NA_REAL; 
+        }
+      }
+      
+      dfList[i] = ntmp;
+      
     }
     
   }
   
   std::vector<int> rowNames(nRows);
   for(int i = 0;i < nRows; ++i)
-  rowNames[i] = i+1;
+    rowNames[i] = i+1;
   
   dfList.attr("names") = colNames;
   dfList.attr("row.names") = rowNames;
@@ -1034,7 +1093,7 @@ IntegerVector matrixRowInds(IntegerVector indices) {
   int j = -1;
   for(int i =0; i < n; i ++){
     if(notDup[i])
-    j++;
+      j++;
     res[i] = j;
   }
   
@@ -1093,153 +1152,12 @@ List buildCellMerges(List comps){
 }
 
 
-// [[Rcpp::export]]
-SEXP readWorkbook(CharacterVector v, NumericVector vn, IntegerVector stringInds, CharacterVector r, CharacterVector tR, int nRows, bool hasColNames, bool skipEmptyRows){
-  
-  // Convert r to column number and shift to scale 0:nCols  (from eg. J:AA in the worksheet)
-  int nCells = r.size();
-  IntegerVector colNumbers = RcppConvertFromExcelRef(r); 
-  colNumbers = match(colNumbers, sort_unique(colNumbers)) - 1;
-  int nCols = *std::max_element(colNumbers.begin(), colNumbers.end()) + 1;
-  
-  // Check if first row are all strings
-  //get first row number
-  
-  CharacterVector colNames(nCols);
-  IntegerVector removeFlag;
-  int pos = 0;
-  
-  // If we are told colNames exist take the first row and fill any gaps with X.i
-  if(hasColNames){
-    
-    char name[6];
-    std::vector<std::string> firstRowNumbers(nCols);
-    std::string ref;
-    
-    // convert first nCols r to firstRowNumbers
-    // get r for which firstRowNumbers == firstRowNumbers[0];
-    for(int i = 0; i < nCols; i++){
-      ref = r[i];
-      ref.erase(std::remove_if(ref.begin(), ref.end(), ::isalpha), ref.end());
-      firstRowNumbers[i] = ref;
-    }
-    
-    ref = firstRowNumbers[0];
-    
-    for(int i = 0; i < nCols; i++){
-      if((i == colNumbers[pos]) & (firstRowNumbers[pos] == ref)){
-        colNames[i] = v[pos];
-        pos = pos + 1;
-      }else{
-        sprintf(&(name[0]), "X%d", i+1);
-        colNames[i] = name;
-      }
-    }
-    
-    // remove elements in tR that appear in the first row (if there are numerics in first row this will remove less elements than pos)
-    CharacterVector::iterator first = r.begin();
-    CharacterVector::iterator last = r.begin() + pos;
-    CharacterVector toRemove(first, last);
-    removeFlag = match(tR, toRemove);
-    tR.erase(tR.begin(), tR.begin() + sum(!is_na(removeFlag)));
-
-    // remove elements that are now being used as colNames (there are int pos many of these)    
-    //check we have some r left if not return a data.frame with zero rows
-    r.erase(r.begin(), r.begin() +  pos); 
-    if(r.size() == 0){
-      List dfList(nCols);
-      IntegerVector rowNames(0);
-      
-      dfList.attr("names") = colNames;
-      dfList.attr("row.names") = rowNames;
-      dfList.attr("class") = "data.frame";
-      return wrap(dfList);
-    }
-    
-    colNumbers.erase(colNumbers.begin(), colNumbers.begin() + pos); 
-    nRows--; // decrement number of rows as first row is now being used as colNames
-    nCells = nCells - pos;
-        
-  }else{
-    char name[6];
-    for(int i =0; i < nCols; i++){
-      sprintf(&(name[0]), "X%d", i+1);
-      colNames[i] = name;
-    }
-  }
-  
-  bool allNumeric = false;
-  
-  if((tR.size() == 0) | (stringInds[0] == -1)) //If the new resized tR is length 0 there are no more strings
-    allNumeric = true;
-    
-  // getRow numbers from r 
-  IntegerVector rowNumbers(nCells);  
-  IntegerVector uRows;
-  if(nCells == nRows*nCols){
-    
-    uRows = seq(0, nRows-1);
-    rowNumbers = rep_each(uRows, nCols); 
-    
-  }else{
-    
-    std::vector<std::string> rs = as<std::vector<std::string> >(r);
-    for(int i = 0; i < nCells; i++){
-      std::string a = rs[i];
-      a.erase(std::remove_if(a.begin(), a.end(), ::isalpha), a.end());
-      rowNumbers[i] = atoi(a.c_str()) - 1; 
-    }
-    
-    if(skipEmptyRows){
-      rowNumbers = matrixRowInds(rowNumbers);
-    }else{
-      rowNumbers = rowNumbers - rowNumbers[0];
-    }
-    
-    uRows = unique(rowNumbers);
-  }
-  
-  SEXP m;
-  if(allNumeric){
-    
-    
-    if(hasColNames) // remove elements that have been "used"
-      vn.erase(vn.begin(), vn.begin() + pos);
-    
-    m = buildMatrixNumeric(vn, rowNumbers, colNumbers, colNames, nRows, nCols);
-    
-  }else{
-    
-    if(hasColNames)// remove elements that have been "used" (we have done this for r already)
-      v.erase(v.begin(), v.begin() + pos);
-    
-    // If it contains any strings it will be a character column
-    IntegerVector charCols = match(tR, r);    
-    
-    int tRSize = tR.size();
-    IntegerVector charColNumbers(tRSize);
-
-    for(int i = 0; i < tRSize; i++)
-      charColNumbers[i] = colNumbers[charCols[i]-1];
-    
-    charCols = unique(charColNumbers);
-
-    m = buildMatrixMixed(v, rowNumbers, colNumbers, colNames, nRows, nCols, charCols);
-    
-  }
-  
-  return wrap(m) ;
-  
-}
-
-
-
 
 
 
 
 // [[Rcpp::export]]
-SEXP quickBuildCellXML(std::string prior, std::string post, List sheetData, IntegerVector rowNumbers, std::string R_fileName){
+SEXP quickBuildCellXML(std::string prior, std::string post, List sheetData, IntegerVector rowNumbers, CharacterVector styleInds, std::string R_fileName){
   
   // open file and write header XML
   const char * s = R_fileName.c_str();
@@ -1266,50 +1184,42 @@ SEXP quickBuildCellXML(std::string prior, std::string post, List sheetData, Inte
   //If data only added once, sheetData will be in order
   // Thus all rows have children (all starting row tags are open) and no need to sort/find
   
-  CharacterVector temp = sheetData.attr("names");    
-  std::vector<std::string> rows = as<std::vector<std::string> >(temp);
+  CharacterVector rows = sheetData.attr("names");    
+  CharacterVector uniqueRows(sort_unique(rowNumbers));
   
-  CharacterVector temp2(sort_unique(rowNumbers));
-  std::vector<std::string> uniqueRows = as<std::vector<std::string> >(temp2);
-  
-  size_t n = temp.size();
+  size_t n = rows.size();
   size_t k = uniqueRows.size();
   std::string xml;
   
-  size_t j=0;
-  string currentRow = uniqueRows[0];
+  LogicalVector hasStyle = !is_na(styleInds);
+  CharacterVector cVal;
   
+  // write sheetData
+  size_t j = 0;
+  String currentRow = uniqueRows[0];
   for(size_t i = 0; i < k; i++){
     
-    std::string r(uniqueRows[i]);
     std::string cellXML;
-    std::vector<std::string> cVal;
     
-    while(currentRow == r){
+    while(currentRow == uniqueRows[i]){
       
-      CharacterVector cValtmp(sheetData[j]);
-      LogicalVector attrs = !is_na(cValtmp);
-      cVal = as<std::vector<std::string> >(cValtmp);
-      
-      // cVal[0] is r    
-      // cVal[1] is t        
-      // cVal[2] is s    
-      // cVal[3] is v    
-      // cVal[4] is f    
+      cVal = sheetData[j];
+      LogicalVector attrs = !is_na(cVal);
       
       //cell XML strings
       cellXML += "<c r=\"" + cVal[0];
       
-      if(attrs[2])
-        cellXML += "\" s=\"" + cVal[2];
+      if(hasStyle[j])
+        cellXML += "\" s=\""+ styleInds[j];
       
       //If we have a t value we must have a v value
       if(attrs[1]){
+        
         //If we have a c value we might have an f value
-        if(attrs[4]){
-          cellXML += "\" t=\"" + cVal[1] + "\">" + cVal[4] + "<v>" + cVal[3] + "</v></c>";
+        if(attrs[3]){
+          cellXML += "\" t=\"" + cVal[1] + "\">" + cVal[3] + "<v>" + cVal[2] + "</v></c>";
         }else{
-          cellXML += "\" t=\"" + cVal[1] + "\"><v>" + cVal[3] + "</v></c>";
+          cellXML += "\" t=\"" + cVal[1] + "\"><v>" + cVal[2] + "</v></c>";
         }
         
       }else{
@@ -1324,7 +1234,7 @@ SEXP quickBuildCellXML(std::string prior, std::string post, List sheetData, Inte
       currentRow = rows[j];
     }
     
-    xmlFile << "<row r=\"" + r + "\">" + cellXML + "</row>";
+    xmlFile << "<row r=\"" + uniqueRows[i] + "\">" + cellXML + "</row>";
     
   }
   
@@ -1346,13 +1256,7 @@ CharacterVector buildTableXML(std::string table, std::string ref, std::vector<st
   int n = colNames.size();
   std::string tableCols;
   std::string tableStyleXML = "<tableStyleInfo name=\"" + tableStyle + "\" showFirstColumn=\"0\" showLastColumn=\"0\" showRowStripes=\"1\" showColumnStripes=\"0\"/>";
-  
-  //if colnames are null
-  if(!showColNames){
-    table += " headerRowCount=\"0\" totalsRowShown=\"0\">";
-  }else{
-    table += " totalsRowShown=\"0\">";
-  }
+  table += " totalsRowShown=\"0\">";
   
   if(withFilter)
     table += "<autoFilter ref=\"" + ref + "\"/>";
@@ -1415,7 +1319,7 @@ List uniqueCellAppend(List sheetData, CharacterVector r, List newCells){
     }
     
     if(j == k)
-    break;
+      break;
   }
   
   for(int i = 0; i < cn; i++){
@@ -1471,6 +1375,7 @@ SEXP getHyperlinkRefs(CharacterVector x){
 List writeCellStyles(List sheetData, CharacterVector rows, IntegerVector cols, String styleId, std::vector<std::string> LETTERS){
   
   
+  
   int nStyleCells = rows.size();
   int n = sheetData.size();
   CharacterVector exCellNames = "";
@@ -1480,9 +1385,9 @@ List writeCellStyles(List sheetData, CharacterVector rows, IntegerVector cols, S
     exCellNames = sheetData.attr("names");
   
   //new cell names will be elements of rows where styleCell doesn't exist  
-    
+  
   // create cellRefs from rows & cols
-  CharacterVector styleCells(nStyleCells);
+  CharacterVector cellRefsToBeStyled(nStyleCells);
   CharacterVector colNames = convert2ExcelRef(cols, LETTERS);
   
   std::string r;
@@ -1491,9 +1396,9 @@ List writeCellStyles(List sheetData, CharacterVector rows, IntegerVector cols, S
   for(int i = 0; i < nStyleCells; i++){
     r = rows[i];
     c = colNames[i];
-    styleCells[i] = c + r; 
+    cellRefsToBeStyled[i] = c + r; 
   }
-
+  
   // get refs of existing cells
   CharacterVector exCells(n);
   CharacterVector tmp;
@@ -1503,10 +1408,10 @@ List writeCellStyles(List sheetData, CharacterVector rows, IntegerVector cols, S
   }
   
   // get all existing cells that need to be styled with this ID
-  IntegerVector exPos = match(exCells, styleCells);
+  IntegerVector exPos = match(exCells, cellRefsToBeStyled);
   LogicalVector toApply = !is_na(exPos);
-    
-  IntegerVector stylePos = match(styleCells, exCells);
+  
+  IntegerVector stylePos = match(cellRefsToBeStyled, exCells);
   LogicalVector isNewCell = is_na(stylePos);
   int nNewCells = sum(isNewCell); 
   
@@ -1533,14 +1438,14 @@ List writeCellStyles(List sheetData, CharacterVector rows, IntegerVector cols, S
     
     if(isNewCell[i]){
       newSheetData[j] = CharacterVector::create(
-        Named("r") = styleCells[i],
-        Named("t") = NA_STRING,
-        Named("s") = styleId,
-        Named("v") = NA_STRING,
-        Named("f") = NA_STRING);
-        
-        newSheetDataNames[j] = rows[i];
-        j++;
+        Named("r") = cellRefsToBeStyled[i],
+                                       Named("t") = NA_STRING,
+                                       Named("s") = styleId,
+                                       Named("v") = NA_STRING,
+                                       Named("f") = NA_STRING);
+      
+      newSheetDataNames[j] = rows[i];
+      j++;
     }
     
   }
@@ -1556,6 +1461,9 @@ List writeCellStyles(List sheetData, CharacterVector rows, IntegerVector cols, S
 SEXP calcNRows(CharacterVector x, bool skipEmptyRows){
   
   int n = x.size();
+  if(n == 0)
+    return(wrap(0));
+  
   int nRows;
   
   if(skipEmptyRows){
@@ -1653,6 +1561,80 @@ CharacterVector removeEmptyNodes(CharacterVector x, CharacterVector emptyNodes){
 
 
 
+
+// [[Rcpp::export]]
+CharacterVector getCellsWithChildrenLimited(std::string xmlFile, CharacterVector emptyNodes, int n){
+  
+  //read in file without spaces
+  std::string xml = cppReadFile(xmlFile);
+  
+  // std::string tag = "<c ";
+  //  std::string tagEnd1 = ">";
+  //  std::string tagEnd2 = "</c>";
+  
+  
+  // count number of rows
+  int occurrences = 0;
+  string::size_type start = 0;
+  
+  while(occurrences <= n) {
+    
+    start = xml.find("<row r", start);
+    if(start == string::npos){
+      break;
+    }else{
+      ++occurrences;
+      start = start + 5;
+    }
+    
+  }
+  
+  xml = xml.substr(0, start);
+  
+  // count cells with children
+  occurrences = 0;
+  start = 0;
+  while((start = xml.find("</v>", start)) != string::npos) {
+    ++occurrences;
+    start += 4;
+  }
+  
+  CharacterVector cells(occurrences);
+  std::fill(cells.begin(), cells.end(), NA_STRING);
+  
+  int i = 0;
+  size_t nextPos = 3;
+  size_t vPos = 2;
+  std::string sub;
+  size_t pos = xml.find("<c ", 0);
+  
+  while(i < occurrences){
+    
+    if(pos != std::string::npos){
+      nextPos = xml.find("<c ", pos+9);
+      vPos = xml.find("</v>", pos+8); // have to atleast pass <c r="XX">
+      
+      if(vPos < nextPos){
+        cells[i] = xml.substr(pos, nextPos-pos);
+        i++; 
+      }
+      
+      pos = nextPos;
+      
+    }
+  }
+  
+  if(emptyNodes[0] != "<v></v>")
+    cells = removeEmptyNodes(cells, emptyNodes);
+  
+  return wrap(cells) ;  
+  
+}
+
+
+
+
+
 // [[Rcpp::export]]
 CharacterVector getCellsWithChildren(std::string xmlFile, CharacterVector emptyNodes){
   
@@ -1698,7 +1680,7 @@ CharacterVector getCellsWithChildren(std::string xmlFile, CharacterVector emptyN
   
   
   if(emptyNodes[0] != "<v></v>")
-  cells = removeEmptyNodes(cells, emptyNodes);
+    cells = removeEmptyNodes(cells, emptyNodes);
   
   return wrap(cells) ;  
   
@@ -1709,7 +1691,7 @@ CharacterVector getCellsWithChildren(std::string xmlFile, CharacterVector emptyN
 
 
 // [[Rcpp::export]]
-SEXP quickBuildCellXML2(std::string prior, std::string post, List sheetData, IntegerVector rowNumbers, List rowHeights, std::string R_fileName){
+SEXP quickBuildCellXML2(std::string prior, std::string post, List sheetData, IntegerVector rowNumbers, CharacterVector styleInds, CharacterVector rowHeights, std::string R_fileName){
   
   // open file and write header XML
   const char * s = R_fileName.c_str();
@@ -1732,39 +1714,35 @@ SEXP quickBuildCellXML2(std::string prior, std::string post, List sheetData, Int
   
   // sheetData will be in order, jsut need to check for rowHeights
   
-  CharacterVector temp = sheetData.attr("names");    
-  std::vector<std::string> rows = as<std::vector<std::string> >(temp);
-  
-  CharacterVector temp2(sort_unique(rowNumbers));
-  std::vector<std::string> uniqueRows = as<std::vector<std::string> >(temp2);
+  CharacterVector rows = sheetData.attr("names");    
+  CharacterVector uniqueRows(sort_unique(rowNumbers));
   
   CharacterVector rowHeightRows = rowHeights.attr("names");
   size_t nRowHeights = rowHeights.size();
   
-  size_t n = temp.size();
+  size_t n = rows.size();
   size_t k = uniqueRows.size();
   std::string xml;
   
   size_t j = 0;
   size_t h = 0;
-  string currentRow = uniqueRows[0];
+  String currentRow = uniqueRows[0];
+  
+  LogicalVector hasStyle = !is_na(styleInds);
+  CharacterVector cVal;
   
   for(size_t i = 0; i < k; i++){
     
-    std::string r(uniqueRows[i]);
     std::string cellXML;
-    std::vector<std::string> cVal;
     bool hasRowData = true;
     
-    while(currentRow == r){
+    while(currentRow == uniqueRows[i]){
       
-      CharacterVector cValtmp(sheetData[j]);
-      LogicalVector attrs = !is_na(cValtmp);
-      cVal = as<std::vector<std::string> >(cValtmp);
+      cVal = sheetData[j];
+      LogicalVector attrs = !is_na(cVal);
       hasRowData = true;
       
-       j += 1;
-       
+      j += 1;
       if(!attrs[0]){ //If r IS NA we have no row data we only have a rowHeight
         hasRowData = false;
         
@@ -1778,16 +1756,16 @@ SEXP quickBuildCellXML2(std::string prior, std::string post, List sheetData, Int
       //cell XML strings
       cellXML += "<c r=\"" + cVal[0];
       
-      if(attrs[2])
-      cellXML += "\" s=\"" + cVal[2];
+      if(hasStyle[j-1]) // Style is j-1 because sheet data is set as j before j is incremented
+        cellXML += "\" s=\"" + styleInds[j-1];
       
       //If we have a t value we must have a v value
       if(attrs[1]){
         //If we have a c value we might have an f value
-        if(attrs[4]){
-          cellXML += "\" t=\"" + cVal[1] + "\">" + cVal[4] + "<v>" + cVal[3] + "</v></c>";
+        if(attrs[3]){
+          cellXML += "\" t=\"" + cVal[1] + "\">" + cVal[3] + "<v>" + cVal[2] + "</v></c>";
         }else{
-          cellXML += "\" t=\"" + cVal[1] + "\"><v>" + cVal[3] + "</v></c>";
+          cellXML += "\" t=\"" + cVal[1] + "\"><v>" + cVal[2] + "</v></c>";
         }
         
       }else{
@@ -1801,20 +1779,30 @@ SEXP quickBuildCellXML2(std::string prior, std::string post, List sheetData, Int
       
     }
     
+    
     if(h < nRowHeights){
-      if((r == as<std::string>(rowHeightRows[h])) & hasRowData){ // this row has a row height and cellXML data
-        xmlFile << "<row r=\"" + r + "\" ht=\"" + as<std::string>(rowHeights[h]) + "\" customHeight=\"1\">" + cellXML + "</row>";   
+      
+      if((uniqueRows[i] == rowHeightRows[h]) & hasRowData){ // this row has a row height and cellXML data
+        
+        xmlFile << "<row r=\"" + uniqueRows[i] + "\" ht=\"" + rowHeights[h] + "\" customHeight=\"1\">" + cellXML + "</row>";   
         h++;
+        
       }else if(hasRowData){
-        xmlFile << "<row r=\"" + r + "\">" + cellXML + "</row>";
+        
+        xmlFile << "<row r=\"" + uniqueRows[i] + "\">" + cellXML + "</row>";
+        
       }else{
-        xmlFile << "<row r=\"" + r + "\" ht=\"" + as<std::string>(rowHeights[h]) + "\" customHeight=\"1\"/>"; 
+        
+        xmlFile << "<row r=\"" + uniqueRows[i] + "\" ht=\"" + rowHeights[h] + "\" customHeight=\"1\"/>"; 
         h++;
       }
+      
     }else{
-      xmlFile << "<row r=\"" + r + "\">" + cellXML + "</row>";
+      
+      xmlFile << "<row r=\"" + uniqueRows[i] + "\">" + cellXML + "</row>";
+      
     }
-        
+    
   }
   
   // write closing tag and XML post sheetData
@@ -1824,7 +1812,7 @@ SEXP quickBuildCellXML2(std::string prior, std::string post, List sheetData, Int
   //close file
   xmlFile.close();
   
-  return Rcpp::wrap(1);
+  return wrap(1);
   
 }
 
@@ -1900,7 +1888,7 @@ SEXP getRefsVals(CharacterVector x, int startRow){
           
         }else{
           below = false;
-      // find <v> tag and </v> end tag
+          // find <v> tag and </v> end tag
           pos = xml.find(vtag, endPos+1);
           
           if(pos != std::string::npos){
@@ -1915,9 +1903,9 @@ SEXP getRefsVals(CharacterVector x, int startRow){
         }
         
       }else{
-      // find <v> tag and </v> end tag
-      pos = xml.find(vtag, endPos+1);
-      
+        // find <v> tag and </v> end tag
+        pos = xml.find(vtag, endPos+1);
+        
         if(pos != std::string::npos){
           endPos = xml.find(vtagEnd, pos + 3);
           v[i] = xml.substr(pos + 3, endPos - pos - 3).c_str();
@@ -1926,13 +1914,12 @@ SEXP getRefsVals(CharacterVector x, int startRow){
           pos = xml.find(">", pos + 1);
           endPos = xml.find(vtagEnd, pos + 3);
           v[i] = xml.substr(pos + 1, endPos - pos - 3).c_str();
-      }       
+        }       
       }
       
     } // end of loop
     
     v = na_omit(v);
-    r = na_omit(r);
     
   } // end of else
   
@@ -1951,5 +1938,425 @@ SEXP getRefsVals(CharacterVector x, int startRow){
 
 
 
+// [[Rcpp::export]]
+std::string createAlignmentNode(List style){
+  
+  std::vector<std::string> nms = style.attr("names");
+  std::string alignNode = "<alignment";
+  
+  // textRotation
+  if(std::find(nms.begin(), nms.end(), "textRotation") != nms.end())
+    alignNode += " textRotation=\""+ as<std::string>(style["textRotation"]) + "\"";
+  
+  // horizontal
+  if(std::find(nms.begin(), nms.end(), "halign") != nms.end())
+    alignNode += " horizontal=\""+ as<std::string>(style["halign"]) + "\"";
+  
+  // vertical
+  if(std::find(nms.begin(), nms.end(), "valign") != nms.end())
+    alignNode += " vertical=\""+ as<std::string>(style["valign"]) + "\"";
+  
+  if(std::find(nms.begin(), nms.end(), "wrapText") != nms.end())
+    alignNode += " wrapText=\"1\"";
+  
+  alignNode += "/>";
+  
+  return alignNode;
+  
+}
+
+
+
+// [[Rcpp::export]]
+std::string createFillNode(List style){
+  
+  std::vector<std::string> nms = style.attr("names");
+  std::string fillNode = "<fill><patternFill patternType=\"solid\">";
+  List tmp;
+  List nm;
+  
+  // foreground
+  if(std::find(nms.begin(), nms.end(), "fillFg") != nms.end()){
+    tmp = style["fillFg"];
+    nm = tmp.attr("names");
+    int n = tmp.size();
+    fillNode += "<fgColor";
+    
+    for(int i = 0; i < n; i ++)
+      fillNode +=  " " +as<std::string>(nm[i]) +"=\"" +  as<std::string>(tmp[i]) + "\"";
+    
+    fillNode += "/>";
+  }
+  
+  // background
+  if(std::find(nms.begin(), nms.end(), "fillBg") != nms.end()){
+    tmp = style["fillBg"];
+    nm = tmp.attr("names");
+    int n = tmp.size();
+    fillNode += "<bgColor";
+    
+    for(int i = 0; i < n; i ++)
+      fillNode +=  " " + as<std::string>(nm[i]) +"=\"" +  as<std::string>(tmp[i]) + "\"";
+    
+    fillNode += "/>";
+  }
+  
+  fillNode += "</patternFill></fill>";
+  
+  return fillNode;
+  
+}
+
+
+
+
+
+
+
+// [[Rcpp::export]]
+std::string createFontNode(List style, std::string defaultFontSize, std::string defaultFontColour, std::string defaultFontName){
+  
+  std::vector<std::string> nms = style.attr("names");
+  std::string fontNode = "<font>";
+  List tmp;
+  std::string nm;
+  
+  // size
+  if(std::find(nms.begin(), nms.end(), "fontSize") != nms.end()){
+    tmp = style["fontSize"];
+    nm = as<std::string>(tmp.attr("names"));
+    fontNode +=  "<sz "+ nm +"=\"" +  as<std::string>(tmp[0]) + "\"/>";
+  }else{
+    fontNode += defaultFontSize;
+  }
+  
+  // colour
+  if(std::find(nms.begin(), nms.end(), "fontColour") != nms.end()){
+    tmp = style["fontColour"];
+    nm = as<std::string>(tmp.attr("names"));
+    fontNode +=  "<color "+ nm +"=\"" +  as<std::string>(tmp[0]) + "\"/>";
+  }else{
+    fontNode += defaultFontColour;
+  }
+  
+  // name
+  if(std::find(nms.begin(), nms.end(), "fontName") != nms.end()){
+    tmp = style["fontName"];
+    nm = as<std::string>(tmp.attr("names"));
+    fontNode +=  "<name "+ nm +"=\"" +  as<std::string>(tmp[0]) + "\"/>";
+  }else{
+    fontNode += defaultFontName;
+  }
+  
+  
+  // fontFamily
+  if(std::find(nms.begin(), nms.end(), "fontFamily") != nms.end()){
+    tmp = style["fontFamily"];
+    fontNode +=  "<family val=\"" +  as<std::string>(tmp[0]) + "\"/>";
+  }
+  
+  // font scheme
+  if(std::find(nms.begin(), nms.end(), "fontScheme") != nms.end()){
+    tmp = style["fontScheme"];
+    fontNode +=  "<scheme val=\"" +  as<std::string>(tmp[0]) + "\"/>";
+  }
+  
+  // Font decorations
+  if(std::find(nms.begin(), nms.end(), "fontDecoration") != nms.end()){
+    
+    tmp = style["fontDecoration"];
+    int n = tmp.size();
+    string d;
+    
+    for(int i = 0;i < n; i++){
+      
+      d = as<std::string>(tmp[i]);
+      if(d == "BOLD")
+        fontNode += "<b/>";
+      
+      if(d == "ITALIC")
+        fontNode += "<i/>";
+      
+      if(d == "UNDERLINE")
+        fontNode += "<u val=\"single\"/>";;
+      
+      if(d == "UNDERLINE2")
+        fontNode += "<u val=\"double\"/>";;
+      
+      if(d == "STRIKEOUT")
+        fontNode += "<strike/>";
+      
+    }
+  }
+  
+  // Create new font and return Id  
+  
+  fontNode += "</font>";
+  
+  return fontNode;
+  
+}
+
+
+
+
+// [[Rcpp::export]]
+std::string createBorderNode(List style, CharacterVector borders){
+  
+  std::vector<std::string> nms = style.attr("names");
+  std::string borderNode = "<border>";
+  List tmp;
+  std::string colourName;
+  
+  if(std::find(nms.begin(), nms.end(), "borderLeft") != nms.end()){
+    tmp = style["borderLeftColour"];
+    colourName = as<std::string>(tmp.attr("names"));
+    borderNode +=  "<left style=\"" + as<std::string>(style["borderLeft"]) + "\"><color " + colourName + "=\"" +  as<std::string>(tmp[0]) + "\"/></left>";
+  }    
+  
+  if(std::find(nms.begin(), nms.end(), "borderRight") != nms.end()){
+    tmp = style["borderRightColour"];
+    colourName = as<std::string>(tmp.attr("names"));
+    borderNode +=  "<right style=\"" + as<std::string>(style["borderRight"]) + "\"><color " + colourName + "=\"" +  as<std::string>(tmp[0]) + "\"/></right>";
+  }  
+  
+  if(std::find(nms.begin(), nms.end(), "borderTop") != nms.end()){
+    tmp = style["borderTopColour"];
+    colourName = as<std::string>(tmp.attr("names"));
+    borderNode +=  "<top style=\"" + as<std::string>(style["borderTop"]) + "\"><color " + colourName + "=\"" +  as<std::string>(tmp[0]) + "\"/></top>";
+  }  
+  
+  if(std::find(nms.begin(), nms.end(), "borderBottom") != nms.end()){
+    tmp = style["borderBottomColour"];
+    colourName = as<std::string>(tmp.attr("names"));
+    borderNode +=  "<bottom style=\"" + as<std::string>(style["borderBottom"]) + "\"><color " + colourName + "=\"" +  as<std::string>(tmp[0]) + "\"/></bottom>";
+  }  
+  
+  borderNode += "</border>";
+  
+  return borderNode;
+  
+}
+
+
+
+
+
+
+// [[Rcpp::export]]
+SEXP getCellStylesPossiblyMissing(CharacterVector x){
+  
+  size_t n = x.size();
+  
+  if(n == 0){
+    CharacterVector ret(1);
+    ret[0] = NA_STRING;
+    return wrap(ret);
+  }
+  
+  
+  std::string xml;
+  CharacterVector t(n);
+  size_t pos = 0;
+  size_t endPos = 0;
+  
+  std::string rtag = " s=";
+  std::string rtagEnd = "\"";
+  
+  for(size_t i = 0; i < n; i++){ 
+    
+    xml = x[i];
+    pos = xml.find(rtag, 1);
+    
+    if(pos == std::string::npos){
+      t[i] = NA_STRING;
+    }else{
+      endPos = xml.find(rtagEnd, pos+4);
+      t[i] = xml.substr(pos+4, endPos-pos-4).c_str();
+    }
+  }
+  
+  return wrap(t) ;  
+  
+}
+
+
+
+
+
+
+
+
+
+// [[Rcpp::export]]
+SEXP readWorkbook(CharacterVector v,
+                  NumericVector vn,
+                  CharacterVector r,
+                  CharacterVector string_refs,
+                  LogicalVector is_date,
+                  int nRows,
+                  bool hasColNames,
+                  bool skipEmptyRows,
+                  int originAdj
+){
+  
+  // Convert r to column number and shift to scale 0:nCols  (from eg. J:AA in the worksheet)
+  int nCells = r.size();
+  IntegerVector colNumbers = RcppConvertFromExcelRef(r); 
+  colNumbers = match(colNumbers, sort_unique(colNumbers)) - 1;
+  int nCols = *std::max_element(colNumbers.begin(), colNumbers.end()) + 1;
+
+  // Check if first row are all strings
+  //get first row number
+  
+  CharacterVector colNames(nCols);
+  IntegerVector removeFlag;
+  int pos = 0;
+  
+  // If we are told colNames exist take the first row and fill any gaps with X.i
+  if(hasColNames){
+    
+    char name[6];
+    std::vector<std::string> firstRowNumbers(nCols);
+    std::string ref;
+    
+    // convert first nCols r to firstRowNumbers
+    // get r for which firstRowNumbers == firstRowNumbers[0];
+    for(int i = 0; i < nCols; i++){
+      ref = r[i];
+      ref.erase(std::remove_if(ref.begin(), ref.end(), ::isalpha), ref.end());
+      firstRowNumbers[i] = ref;
+    }
+    
+    ref = firstRowNumbers[0];
+    
+    for(int i = 0; i < nCols; i++){
+      if((i == colNumbers[pos]) & (firstRowNumbers[pos] == ref)){
+        colNames[i] = v[pos];
+        pos = pos + 1;
+      }else{
+        sprintf(&(name[0]), "X%d", i+1);
+        colNames[i] = name;
+      }
+    }
+    
+    // remove elements in string_refs that appear in the first row (if there are numerics in first row this will remove less elements than pos)
+    CharacterVector::iterator first = r.begin();
+    CharacterVector::iterator last = r.begin() + pos;
+    CharacterVector toRemove(first, last);
+    removeFlag = match(string_refs, toRemove);
+    string_refs.erase(string_refs.begin(), string_refs.begin() + sum(!is_na(removeFlag)));
+    
+    // remove elements that are now being used as colNames (there are int pos many of these)    
+    //check we have some r left if not return a data.frame with zero rows
+    r.erase(r.begin(), r.begin() +  pos); 
+    
+    //If nothing left return a data.frame with 0 rows
+    if(r.size() == 0){
+      List dfList(nCols);
+      IntegerVector rowNames(0);
+      
+      dfList.attr("names") = colNames;
+      dfList.attr("row.names") = rowNames;
+      dfList.attr("class") = "data.frame";
+      return wrap(dfList);
+    }
+    
+    colNumbers.erase(colNumbers.begin(), colNumbers.begin() + pos); 
+    nRows--; // decrement number of rows as first row is now being used as colNames
+    nCells = nCells - pos;
+    
+  }else{ // else colNames is FALSE
+    char name[6];
+    for(int i =0; i < nCols; i++){
+      sprintf(&(name[0]), "X%d", i+1);
+      colNames[i] = name;
+    }
+  }
+  
+  /* column names now sorted */
+  
+  // getRow numbers from r 
+  IntegerVector rowNumbers(nCells);  
+  IntegerVector uRows;
+  if(nCells == nRows*nCols){
+    
+    uRows = seq(0, nRows-1);
+    rowNumbers = rep_each(uRows, nCols); 
+    
+  }else{
+    
+    std::vector<std::string> rs = as<std::vector<std::string> >(r);
+    for(int i = 0; i < nCells; i++){
+      std::string a = rs[i];
+      a.erase(std::remove_if(a.begin(), a.end(), ::isalpha), a.end());
+      rowNumbers[i] = atoi(a.c_str()) - 1; 
+    }
+    
+    if(skipEmptyRows){
+      rowNumbers = matrixRowInds(rowNumbers);
+    }else{
+      rowNumbers = rowNumbers - rowNumbers[0];
+    }
+    
+    uRows = unique(rowNumbers);
+  }
+  
+  
+  // Possible there are no stringInds to begin with and value of stringInds is 0
+  // Possible we have stringInds but they have now all been used up by string_refs
+  bool allNumeric = false;
+  if((string_refs.size() == 0) | all(is_na(string_refs)))
+    allNumeric = true;
+  
+  if(is_true(any(is_date)))
+    allNumeric = false;
+
+
+  // If we build colnames we remove the ref & values for the pos number of elements used 
+  if(hasColNames){
+    vn.erase(vn.begin(), vn.begin() + pos);
+    is_date.erase(is_date.begin(), is_date.begin() + pos);
+  }
+  
+  
+  //Intialise return data.frame
+  SEXP m; 
+  
+  if(allNumeric){
+    
+    m = buildMatrixNumeric(vn, rowNumbers, colNumbers, colNames, nRows, nCols);
+    
+  }else{
+    
+    v.erase(v.begin(), v.begin() + pos);
+    
+    // If it contains any strings it will be a character column
+    IntegerVector charCols;
+    if(all(is_na(string_refs))){
+      charCols = -1;
+    }else{
+      charCols = match(string_refs, r);
+      IntegerVector charColNumbers = colNumbers[charCols-1];
+      charCols = unique(charColNumbers);
+    }
+    
+    //Rcout << "colNumbers.size(): " << colNumbers.size() << endl; 
+    //Rcout << "is_date.size(): " << is_date.size() << endl; 
+    //Rcout << "v.size(): " << v.size() << endl; 
+    //Rcout << "vn.size(): " << vn.size() << endl; 
+    //Rcout << "rowNumbers.size(): " << rowNumbers.size() << endl; 
+    
+    //date columns
+    IntegerVector dateCols = colNumbers[is_date];
+    dateCols = sort_unique(dateCols);
+
+    m = buildMatrixMixed(v, vn, rowNumbers, colNumbers, colNames, nRows, nCols, charCols, dateCols, originAdj);
+    
+  }
+  
+  return wrap(m) ;
+  
+}
 
 

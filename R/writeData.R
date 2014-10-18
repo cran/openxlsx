@@ -5,8 +5,8 @@
 #' @param wb A Workbook object containing a worksheet.
 #' @param sheet The worksheet to write to. Can be the worksheet index or name.
 #' @param x Object to be written. For classes supported look at the examples.
-#' @param startCol A vector specifiying the starting columns(s) to write to.
-#' @param startRow A vector specifiying the starting row(s) to write to.
+#' @param startCol A vector specifiying the starting column to write to.
+#' @param startRow A vector specifiying the starting row to write to.
 #' @param xy An alternative to specifying \code{startCol} and
 #' \code{startRow} individually.  A vector of the form
 #' \code{c(startCol, startRow)}.
@@ -21,7 +21,6 @@
 #' each column. If "\code{all}" all cell borders are drawn.
 #' @param borderColour Colour of cell border.  A valid colour (belonging to \code{colours()} or a hex colour code, eg see \href{http://www.colorpicker.com}{here}).
 #' @param borderStyle Border line style
-#' @param withFilter If TRUE, add filters to column name row. NOTE can only have one filter per worksheet. 
 #' \itemize{
 #'    \item{\bold{none}}{ no border}
 #'    \item{\bold{thin}}{ thin border}
@@ -38,7 +37,8 @@
 #'    \item{\bold{mediumDashDotDot}}{ medium weight dash-dot-dot border}
 #'    \item{\bold{slantDashDot}}{ slanted dash-dot border}
 #'   }
-#' @param keepNA If TRUE, NA values are converted to #N/A in Excel else NA cells will be empty.
+#' @param withFilter If \code{TRUE}, add filters to the column name row. NOTE can only have one filter per worksheet. 
+#' @param keepNA If \code{TRUE}, NA values are converted to #N/A in Excel else NA cells will be empty.
 #' @seealso \code{\link{writeDataTable}}
 #' @export writeData
 #' @rdname writeData
@@ -102,7 +102,7 @@ writeData <- function(wb,
                       keepNA = FALSE){
   
   ## increase scipen to avoid writing in scientific 
-  exSciPen <- options("scipen")
+  exSciPen <- getOption("scipen")
   options("scipen" = 10000)
   on.exit(options("scipen" = exSciPen), add = TRUE)
   
@@ -133,169 +133,35 @@ writeData <- function(wb,
   ## borderColours validation
   borderColour <- validateColour(borderColour, "Invalid border colour")
   borderStyle <- validateBorderStyle(borderStyle)[[1]]
-  
-  ## Have decided to not use S3 as too much code duplication with input checking/converting
-  ## given that everything has to fit into a grid.
-  
-  clx <- class(x)
+    
+  ## special case - vector of hyperlinks
   hlinkNames <- NULL
-  if(any(c("data.frame", "data.table") %in% clx)){
-    ## Do nothing
-    
-  }else if("matrix" %in% clx){
-    x <- as.data.frame(x, stringsAsFactors = FALSE)
-    
-  }else if("array" %in% clx){
-    stop("array in writeData : currently not supported")
-    
-  }else if("aov" %in% clx){
-    
-    x <- summary(x)
-    x <- cbind(x[[1]])
-    x <- cbind(data.frame("row name" = rownames(x)), x)
-    names(x)[1] <- ""
-    rowNames <- FALSE 
-    
-  }else if("lm" %in% clx){
-    
-    x <- as.data.frame(summary(x)[["coefficients"]])
-    x <- cbind(data.frame("Variable" = rownames(x)), x)
-    names(x)[1] <- ""
-    rowNames <- FALSE
-    
-  }else if("anova" %in% clx){
-    
-    x <- cbind(x)
-    x <- cbind(data.frame("row name" = rownames(x)), x)
-    names(x)[1] <- ""
-    rowNames <- FALSE
-    
-  }else if("glm" %in% clx){
-    
-    x <- as.data.frame(summary(x)[["coefficients"]])
-    x <- cbind(data.frame("row name" = rownames(x)), x)
-    names(x)[1] <- ""
-    rowNames <- FALSE
-    
-  }else if("table" %in% clx){
-    
-    x <- as.data.frame(unclass(x))
-    x <- cbind(data.frame("Variable" = rownames(x)), x)
-    names(x)[1] <- ""
-    rowNames <- FALSE
-    
-  }else if("prcomp" %in% clx){
-    
-    x <- as.data.frame(x$rotation)
-    x <- cbind(data.frame("Variable" = rownames(x)), x)
-    names(x)[1] <- ""
-    rowNames <- FALSE
-    
-  }else if("summary.prcomp" %in% clx){
-    
-    x <- as.data.frame(x$importance)
-    x <- cbind(data.frame("Variable" = rownames(x)), x)
-    names(x)[1] <- ""
-    rowNames <- FALSE
-
-  }else if("survdiff" %in% clx){
-
-    ## like print.survdiff with some ideas from the ascii package
-    if (length(x$n) == 1) {
-      z <- sign(x$exp - x$obs) * sqrt(x$chisq)
-      temp <- c(x$obs, x$exp, z, 1 - pchisq(x$chisq,  1))
-      names(temp) <- c("Observed", "Expected", "Z", "p")
-      x <- as.data.frame(t(temp))
-    }
-    else {                              
-      if (is.matrix(x$obs)) {
-        otmp <- apply(x$obs, 1, sum)
-        etmp <- apply(x$exp, 1, sum)
-      }
-      else {
-        otmp <- x$obs
-        etmp <- x$exp
-      }
-      chisq <- c(x$chisq, rep(NA, length(x$n) - 1))
-      df <- c((sum(1 * (etmp > 0))) - 1, rep(NA, length(x$n) - 1))
-      p <- c(1 - pchisq(x$chisq, df[!is.na(df)]), rep(NA, length(x$n) - 1))
-      temp <- cbind( x$n, otmp, etmp, 
-                    ((otmp - etmp)^2)/etmp, ((otmp - etmp)^2)/diag(x$var),
-                    chisq, df, p)
-      colnames(temp) <- c("N", "Observed", "Expected", "(O-E)^2/E", "(O-E)^2/V",
-                          "Chisq", "df","p")
-      temp <- as.data.frame(temp, checknames = FALSE)
-      x <- cbind("Group" = names(x$n), temp)
-      names(x)[1] <- ""
-    }
-    rowNames <- FALSE
-
-  }else if("coxph" %in% clx){
-    ## sligthly modified print.coxph
-    coef <- x$coefficients
-    se <- sqrt(diag(x$var))
-    if (is.null(coef) | is.null(se)) 
-      stop("Input is not valid")
-    if (is.null(x$naive.var)) {
-      tmp <- cbind(coef, exp(coef), se, coef/se, pchisq((coef/se)^2, 1))
-      colnames(tmp) <- c("coef", "exp(coef)", "se(coef)", "z", "p")
-    }
-    else {
-      nse <- sqrt(diag(x$naive.var))
-      tmp <- cbind(coef, exp(coef), nse, se, coef/se, pchisq((coef/se)^2, 1))
-      colnames(tmp) <- c("coef", "exp(coef)", "se(coef)", "robust se", "z", "p")
-    }
-    x <- cbind("Variable" = names(coef), as.data.frame(tmp, checknames = FALSE))
-    names(x)[1] <- ""
-    rowNames <- FALSE
-
-  }else if("summary.coxph" %in% clx){
-
-    coef <- x$coefficients
-    ci <- x$conf.int
-    nvars <- nrow(coef)
-    tmp <- cbind(coef[, - ncol(coef), drop=FALSE],          #p later
-                 ci[, (ncol(ci) - 1):ncol(ci), drop=FALSE], #confint
-                 coef[, ncol(coef), drop=FALSE])            #p.value
-    x <- as.data.frame(tmp, checknames = FALSE)
-    rowNames <- TRUE
-    
-  }else if("cox.zph" %in% clx){
-
-    x <- as.data.frame(x$table)
-    rowNames <- TRUE
-    
-  }else{
-    
-    if('hyperlink' %in% tolower(class(x))){
-      hlinkNames <- names(x)
-      class(x) <- c("character", "hyperlink") 
-    }
-    x <- as.data.frame(x, stringsAsFactors = FALSE)
-    colNames <- FALSE
-    rowNames <- FALSE
+  if("hyperlink" %in% class(x)){
+    hlinkNames <- names(x)
+    colNames = FALSE
   }
   
-  ## cbind rownames to x
-  if(rowNames){
-    x <- cbind(data.frame("row names" = rownames(x)), x)
-    names(x)[[1]] <- ""
-  }
+  if(is.vector(x) | is.factor(x))
+    colNames <- FALSE ## this will go to coerce.default and rowNames will be ignored 
   
+  ## Coerce to data.frame
+  x <- openxlsxCoerce(x, rowNames)
+    
   nCol <- ncol(x)
   nRow <- nrow(x)
   
   ## If no rows and not writing column names return as nothing to write
   if(nRow == 0 & !colNames)
     return(invisible(0))
-  
-  ## write autoFilter, can only have a single filter per worksheet
-  if(withFilter)
-    wb$worksheets[[sheet]]$autoFilter <- sprintf('<autoFilter ref="%s"/>', paste(getCellRefs(data.frame("x" = c(startRow, startRow), "y" = c(startCol, startCol + nCol - 1L))), collapse = ":"))
-  
+    
   colClasses <- lapply(x, function(x) tolower(class(x)))
-  sheet <- wb$validateSheet(sheet)
+  
 
+  ## write autoFilter, can only have a single filter per worksheet
+  sheetX <- wb$validateSheet(sheet)
+  if(withFilter)
+    wb$worksheets[[sheetX]]$autoFilter <- sprintf('<autoFilter ref="%s"/>', paste(getCellRefs(data.frame("x" = c(startRow, startRow), "y" = c(startCol, startCol + nCol - 1L))), collapse = ":"))
+  
   ## write data.frame
   wb$writeData(df = x,
                colNames = colNames,

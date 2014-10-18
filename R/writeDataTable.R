@@ -4,17 +4,17 @@
 #' @param wb A Workbook object containing a worksheet.
 #' @param sheet The worksheet to write to. Can be the worksheet index or name.
 #' @param x A dataframe.
-#' @param startCol A vector specifiying the starting columns(s) to write df
-#' @param startRow A vector specifiying the starting row(s) to write df
+#' @param startCol A vector specifiying the starting column to write df
+#' @param startRow A vector specifiying the starting row to write df
 #' @param xy An alternative to specifying startCol and startRow individually.  
 #' A vector of the form c(startCol, startRow)
-#' @param colNames If TRUE, column names of x are written.
-#' @param rowNames If TRUE, row names of x are written.
-#' @param tableStyle Any excel table style name or "none".
+#' @param colNames If \code{TRUE}, column names of x are written.
+#' @param rowNames If \code{TRUE}, row names of x are written.
+#' @param tableStyle Any excel table style name or "none" (see "formatting" vignette).
 #' @param tableName name of table in workbook. The table name must be unique.
 #' @param headerStyle Custom style to apply to column names.
-#' @param withFilter If TRUE, columns with have withFilters in the first row.
-#' @param keepNA If TRUE, NA values are converted to #N/A in Excel else NA cells will be empty.
+#' @param withFilter If \code{TRUE}, columns with have withFilters in the first row.
+#' @param keepNA If \code{TRUE}, NA values are converted to #N/A in Excel else NA cells will be empty.
 #' @details columns of x with class Date/POSIXt, currency, accounting, 
 #' hyperlink, percentage are automatically styled as dates, currency, accounting,
 #' hyperlinks, percentages respectively.
@@ -93,8 +93,9 @@ writeDataTable <- function(wb, sheet, x,
     tableName <- tableName
   }
   
+  
   ## increase scipen to avoid writing in scientific 
-  exSciPen <- options("scipen")
+  exSciPen <- getOption("scipen")
   options("scipen" = 10000)
   on.exit(options("scipen" = exSciPen), add = TRUE)
   
@@ -142,15 +143,16 @@ writeDataTable <- function(wb, sheet, x,
     
   }else{
     colNames <- paste0("Column", 1:ncol(x))
+    names(x) <- colNames
   }
   ## If zero rows, append an empty row (prevent XML from corrupting)
   if(nrow(x) == 0){
     x <- rbind(x, matrix("", nrow = 1, ncol = ncol(x)))
     names(x) <- colNames
   }
-  
+    
   ref1 <- paste0(.Call('openxlsx_convert2ExcelRef', startCol, LETTERS, PACKAGE="openxlsx"), startRow)
-  ref2 <- paste0(.Call('openxlsx_convert2ExcelRef', startCol+ncol(x)-1, LETTERS, PACKAGE="openxlsx"), startRow+nrow(x)-1 + showColNames)
+  ref2 <- paste0(.Call('openxlsx_convert2ExcelRef', startCol+ncol(x)-1, LETTERS, PACKAGE="openxlsx"), startRow + nrow(x))
   ref <- paste(ref1, ref2, sep = ":")
   
   ## check not overwriting another table
@@ -161,7 +163,7 @@ writeDataTable <- function(wb, sheet, x,
 
       exTable <- wb$tables[tableSheets %in% sheet]
     
-      newRows <- c(startRow, startRow + nrow(x) - 1L + showColNames)
+      newRows <- c(startRow, startRow + nrow(x) - 1L + 1)
       newCols <- c(startCol, startCol + ncol(x) - 1L)
       
       rows <- lapply(names(exTable), function(rectCoords) as.numeric(unlist(regmatches(rectCoords, gregexpr("[0-9]+", rectCoords)))))
@@ -182,11 +184,11 @@ writeDataTable <- function(wb, sheet, x,
   
   ## column class styling
   colClasses <- lapply(x, function(x) tolower(class(x)))
-  classStyles(wb, sheet = sheet, startRow = startRow, startCol = startCol, colNames = showColNames, nRow = nrow(x), colClasses = colClasses)
+  classStyles(wb, sheet = sheet, startRow = startRow, startCol = startCol, colNames = TRUE, nRow = nrow(x), colClasses = colClasses)
   
   ## write data to sheetData
   wb$writeData(df = x,
-               colNames = showColNames,
+               colNames = TRUE,
                sheet = sheet,
                startRow = startRow,
                startCol = startCol,
