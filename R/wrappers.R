@@ -61,8 +61,8 @@ saveWorkbook <- function(wb, file, overwrite = FALSE){
   if(!"Workbook" %in% class(wb))
     stop("First argument must be a Workbook.")
   
-#   if(!grepl("\\.xlsx", file))
-#     file <- paste0(file, ".xlsx")
+  #   if(!grepl("\\.xlsx", file))
+  #     file <- paste0(file, ".xlsx")
   
   if(!is.logical(overwrite))
     overwrite = FALSE
@@ -128,6 +128,23 @@ mergeCells <- function(wb, sheet, cols, rows){
   
   wb$mergeCells(sheet, startRow = min(rows), endRow = max(rows), startCol = min(cols), endCol = max(cols))
   
+}
+
+
+
+#' @name int2col
+#' @title Convert integer to Excel column
+#' @description Converts an integer to an Excel column label. 
+#' @param x A numeric vector
+#' @export
+#' @examples
+#' int2col(1:10)
+int2col <- function(x){
+  
+  if(!is.numeric(x))
+    stop("x must be numeric.")
+  
+  .Call('openxlsx_convert2ExcelRef', PACKAGE = 'openxlsx', x, LETTERS)
 }
 
 
@@ -289,7 +306,7 @@ addWorksheet <- function(wb, sheetName,
   
   if(!is.numeric(zoom))
     stop("zoom must be numeric")
-    
+  
   if(!is.character(sheetName))
     sheetName <- as.character(sheetName)
   
@@ -494,6 +511,7 @@ convertFromExcelRef <- function(col){
 #'   
 #' @param wrapText Logical. If \code{TRUE} cell contents will wrap to fit in column.  
 #' @param textRotation Rotation of text in degrees. 255 for vertial text.
+#' @param indent Horizontal indentation of cell contents.
 #' @return A style object
 #' @export
 #' @examples
@@ -529,7 +547,8 @@ createStyle <- function(fontName = NULL,
                         bgFill = NULL, fgFill = NULL,
                         halign = NULL, valign = NULL, 
                         textDecoration = NULL, wrapText = FALSE,
-                        textRotation = NULL){
+                        textRotation = NULL,
+                        indent = NULL){
   
   ### Error checking
   
@@ -541,8 +560,9 @@ createStyle <- function(fontName = NULL,
   if(numFmt == "date"){
     numFmt <- getOption("openxlsx.dateFormat", getOption("openxlsx.dateformat", "date"))
   }else if(!numFmt %in% validNumFmt){
-    if(grepl("[^mdyhsap[[:punct:] 0\\.#\\$\\*]", numFmt))
-      stop("Invalid numFmt")
+    # if(grepl("[^mdyhsap[[:punct:] 0\\.#\\$\\*]", numFmt))
+    # stop("Invalid numFmt")
+    numFmt <- replaceIllegalCharacters(numFmt)
   }
   
   if(numFmt == "longdate"){
@@ -585,6 +605,11 @@ createStyle <- function(fontName = NULL,
   
   if(!is.logical(wrapText))
     stop("Invalid wrapText")
+  
+  if(!is.null(indent)){
+    if(!is.numeric(indent) & !is.integer(indent))
+      stop("indent must be numeric")
+  }
   
   textDecoration <- tolower(textDecoration)
   if(!is.null(textDecoration)){
@@ -681,7 +706,10 @@ createStyle <- function(fontName = NULL,
   
   if(!is.null(valign))
     style$valign <- valign
-
+  
+  if(!is.null(indent))
+    style$indent <- indent
+  
   if(wrapText)
     style$wrapText <- TRUE
   
@@ -764,9 +792,13 @@ addStyle <- function(wb, sheet, style, rows, cols, gridExpand = FALSE, stack = F
     combs <- expand.grid(cols, rows) 
     cols <- combs[,1]
     rows <- combs[,2]
-  }
-  
-  if(length(rows) != length(cols)){
+  }else if(length(rows) == 1 & length(cols) > 1){
+    rows <- rep.int(rows, times = length(cols))
+    
+  }else if(length(cols) == 1 & length(rows) > 1){
+    cols <- rep.int(cols, times = length(rows))
+    
+  }else if(length(rows) != length(cols)){
     stop("Length of rows and cols must be equal.")
   }
   
@@ -983,7 +1015,7 @@ setRowHeights <- function(wb, sheet, rows, heights){
   rows <- rows[!duplicated(rows)]
   
   
-  heights <- as.list(as.character(as.numeric(heights)))
+  heights <- as.character(as.numeric(heights))
   names(heights) <- rows
   
   wb$setRowHeights(sheet, rows, heights)
@@ -1046,8 +1078,7 @@ setColWidths <- function(wb, sheet, cols, widths, ignoreMergedCells = FALSE){
     widths <- rep(widths, length.out = length(cols))
   
   ## check for existing custom widths
-  exColsWidths <- unlist(lapply(wb$colWidths[[sheet]], "[[", "col"))
-  flag <- exColsWidths %in% cols
+  flag <- names(wb$colWidths[[sheet]]) %in% cols
   if(any(flag))
     wb$colWidths[[sheet]] <- wb$colWidths[[sheet]][!flag]
   
@@ -1057,8 +1088,13 @@ setColWidths <- function(wb, sheet, cols, widths, ignoreMergedCells = FALSE){
   widths <- widths[!duplicated(cols)]
   cols <- cols[!duplicated(cols)]
   
-  allWidths <- append(wb$colWidths[[sheet]], lapply(1:length(cols), function(i) c('col' = cols[[i]], 'width' = widths[[i]])))
-  allWidths <- allWidths[order(as.integer(sapply(allWidths, "[[", "col")))]
+  names(widths) <- cols
+  exNames <- names(wb$colWidths[[sheet]])
+  
+  allWidths <- unlist(c(wb$colWidths[[sheet]], widths))
+  names(allWidths) <- c(exNames, cols)
+  
+  allWidths <- allWidths[order(as.integer(names(allWidths)))]
   
   wb$colWidths[[sheet]] <- allWidths
 }
@@ -1085,12 +1121,27 @@ removeColWidths <- function(wb, sheet, cols){
   
   if(!is.numeric(cols))
     cols <- convertFromExcelRef(cols)
-  
-  customCols <- as.integer(unlist(lapply(wb$colWidths[[sheet]], "[[", "col")))
+
+  customCols <- as.integer(names(wb$colWidths[[sheet]]))
   removeInds <- which(customCols %in% cols)
-  if(length(removeInds) > 0)
-    wb$colWidths[[sheet]] <- wb$colWidths[[sheet]][-removeInds]
-  
+  if(length(removeInds) > 0){
+    
+    remainingCols <- customCols[-removeInds]
+    if(length(remainingCols) == 0){
+      wb$colWidths[[sheet]] <- list()
+    }else{
+      
+      rem_widths <- wb$colWidths[[sheet]][-removeInds]
+      names(rem_widths) <- as.character(remainingCols)
+      wb$colWidths[[sheet]] <- rem_widths
+      
+    }
+    
+    
+    
+  }
+
+    
 }
 
 
@@ -1384,7 +1435,7 @@ deleteData <- function(wb, sheet, cols, rows, gridExpand = FALSE){
 #' writeData(wb, "S1", iris)
 #' writeDataTable(wb, "S1", x = iris, startCol = 10) ## font colour does not affect tables
 #' saveWorkbook(wb, "modifyBaseFontExample.xlsx", overwrite = TRUE)
-modifyBaseFont <- function(wb, fontSize = 11, fontColour = "#000000", fontName = "Calibri"){
+modifyBaseFont <- function(wb, fontSize = 11, fontColour = "black", fontName = "Calibri"){
   
   if(!"Workbook" %in% class(wb))
     stop("First argument must be a Workbook.")
@@ -1594,7 +1645,7 @@ pageSetup <- function(wb, sheet, orientation = "portrait", scale = 100,
     stop("Scale must be between 10 and 400.")
   
   for(sheet in sheet){
-  
+    
     sheet <- wb$validateSheet(sheet)
     
     wb$worksheets[[sheet]]$pageSetup <- sprintf('<pageSetup paperSize="9" orientation="%s" scale = "%s" fitToWidth="%s" fitToHeight="%s" horizontalDpi="300" verticalDpi="300" r:id="rId2"/>', 
@@ -1730,14 +1781,14 @@ worksheetOrder <- function(wb){
 #' convertToDate(c(41750, 41751, 41752, 41753, 41754, NA) )
 #' convertToDate(c(41750.2, 41751.99, NA, 41753 ))
 convertToDate <- function(x, origin = "1900-01-01"){
-
+  
   x <- as.numeric(x)
   notNa <- !is.na(x)
   if(origin == "1900-01-01")
     x[notNa] <- x[notNa] - 2
-    
+  
   return(as.Date(x, origin = origin))
-
+  
   
 }
 
@@ -1746,13 +1797,15 @@ convertToDate <- function(x, origin = "1900-01-01"){
 #' @title Convert from excel time number to R POSIXct type.
 #' @param x A numeric vector
 #' @param origin date. Default value is for Windows Excel 2010
-#' @details Excel stores dates as number of days from some origin day
+#' @param ... Additional parameters passed to as.POSIXct
+#' @details Excel stores dates as number of days from some origin date
 #' @export
 #' @examples
 #' ## 2014-07-01, 2014-06-30, 2014-06-29
 #' x <- c(41821.8127314815, 41820.8127314815, NA, 41819, NaN) 
 #' convertToDateTime(x)
-convertToDateTime <- function(x, origin = "1900-01-01"){
+#' convertToDateTime(x, tx = "Australia/Perth")
+convertToDateTime <- function(x, origin = "1900-01-01", ...){
   
   rem <- x %% 1
   date <- convertToDate(x, origin)
@@ -1765,9 +1818,10 @@ convertToDateTime <- function(x, origin = "1900-01-01"){
   y <- format(strptime(y, "%H:%M:%S"), "%H:%M:%S") 
   
   notNA <- !is.na(x)
-  dateTime <- .POSIXct(character(length(x)))
-  dateTime[notNA] <- as.POSIXct(paste(date[notNA], y[notNA]))
-  
+  dateTime = rep(NA, length(x))
+  dateTime[notNA] <- as.POSIXct(paste(date[notNA], y[notNA]), ...)
+  dateTime = .POSIXct(dateTime)
+
   return(dateTime)
 }
 
@@ -1825,6 +1879,31 @@ names.Workbook <- function(x){
 }
 
 
+
+#' @name getNamedRegions
+#' @title Get named regions in an xlsx file.
+#' @param xlsxFile An xlsx file or Workbook object
+#' @export
+#' @examples
+#' ##getNamedRegions
+getNamedRegions <- function(xlsxFile){
+  
+  xmlDir <- file.path(tempdir(), "named_regions_tmp")
+  xmlFiles <- unzip(xlsxFile, exdir = xmlDir)
+  
+  workbook <- xmlFiles[grepl("workbook.xml$", xmlFiles, perl = TRUE)]
+  workbook <- unlist(readLines(workbook, warn = FALSE, encoding = "UTF-8"))
+  
+  dn <- .Call("openxlsx_getChildlessNode", removeHeadTag(workbook), "<definedName ", PACKAGE = "openxlsx")
+  if(length(dn) == 0)
+    return(NULL)
+  
+  dn_names <- regmatches(dn, regexpr('(?<=name=")[^"]+', dn, perl = TRUE))
+  
+  unlink(xmlDir, recursive = TRUE, force = TRUE)
+  
+  return(dn_names)
+}
 
 
 
@@ -1914,6 +1993,11 @@ removeFilter <- function(wb, sheet){
   invisible(wb)
   
 }
+
+
+
+
+
 
 
 
@@ -2185,7 +2269,7 @@ conditionalFormatting <- function(wb, sheet, cols, rows, rule = NULL, style = NU
     
     if(is.null(style))
       style <- "#638EC6"
-      
+    
     if(class(style) != "character")
       stop("If type == 'dataBar', style must be a vector of colours of length 1 or 2.")
     
@@ -2337,6 +2421,49 @@ getDateOrigin <- function(xlsxFile){
 
 
 
+
+#' @name getSheetNames
+#' @title Returns the worksheet names within an xlsx file
+#' @author Alexander Walker
+#' @param file An xlsx or xlsm file.
+#' @return Character vector of worksheet names.
+#' @examples
+#' getSheetNames(system.file("readTest.xlsx", package = "openxlsx"))
+#' 
+#' @export
+getSheetNames <- function(file){
+  
+  if(!file.exists(file))
+    stop("file does not exist.")
+  
+  if(grepl("\\.xls$|\\.xlm$", file))
+    stop("openxlsx can not read .xls or .xlm files!")
+  
+  ## create temp dir and unzip
+  xmlDir <- file.path(tempdir(), "_excelXMLRead")
+  xmlFiles <- unzip(file, exdir = xmlDir)
+  
+  on.exit(unlink(xmlDir, recursive = TRUE), add = TRUE)
+  
+  workbook <- xmlFiles[grepl("workbook.xml$", xmlFiles, perl = TRUE)]
+  workbook <- readLines(workbook, warn=FALSE, encoding="UTF-8")
+  workbook <-  removeHeadTag(workbook)
+  sheets <- unlist(regmatches(workbook, gregexpr("<sheet .*/sheets>", workbook, perl = TRUE)))
+  sheetNames <- unlist(regmatches(sheets, gregexpr('(?<=name=")[^"]+', sheets, perl = TRUE)))
+  sheetNames <- replaceXMLEntities(sheetNames)
+  
+  return(sheetNames)
+  
+}
+
+
+
+
+
+
+
+
+
 #' @name conditionalFormat
 #' @title Add conditional formatting to cells
 #' @description DEPRECATED! USE \code{\link{conditionalFormatting}}
@@ -2370,27 +2497,27 @@ getDateOrigin <- function(xlsxFile){
 #' ## rule applies to all each cell in range
 #' writeData(wb, 1, -5:5)
 #' writeData(wb, 1, LETTERS[1:11], startCol=2)
-#' conditionalFormat(wb, 1, cols=1, rows=2:12, rule="!=0", style = negStyle)
-#' conditionalFormat(wb, 1, cols=1, rows=2:12, rule="==0", style = posStyle)
+#' conditionalFormat(wb, 1, cols=1, rows=1:11, rule="!=0", style = negStyle)
+#' conditionalFormat(wb, 1, cols=1, rows=1:11, rule="==0", style = posStyle)
 #' 
 #' ## highlight row dependent on first cell in row
 #' writeData(wb, 2, -5:5)
 #' writeData(wb, 2, LETTERS[1:11], startCol=2)
-#' conditionalFormat(wb, 2, cols=1:2, rows=2:12, rule="$A1<0", style = negStyle)
-#' conditionalFormat(wb, 2, cols=1:2, rows=2:12, rule="$A1>0", style = posStyle)
+#' conditionalFormat(wb, 2, cols=1:2, rows=1:11, rule="$A1<0", style = negStyle)
+#' conditionalFormat(wb, 2, cols=1:2, rows=1:11, rule="$A1>0", style = posStyle)
 #' 
 #' ## highlight column dependent on first cell in column
 #' writeData(wb, 3, -5:5)
 #' writeData(wb, 3, LETTERS[1:11], startCol=2)
-#' conditionalFormat(wb, 3, cols=1:2, rows=2:12, rule="A$1<0", style = negStyle)
-#' conditionalFormat(wb, 3, cols=1:2, rows=2:12, rule="A$1>0", style = posStyle)
+#' conditionalFormat(wb, 3, cols=1:2, rows=1:11, rule="A$1<0", style = negStyle)
+#' conditionalFormat(wb, 3, cols=1:2, rows=1:11, rule="A$1>0", style = posStyle)
 #' 
 #' 
 #' ## highlight entire range cols X rows dependent only on cell A1
 #' writeData(wb, 4, -5:5)
 #' writeData(wb, 4, LETTERS[1:11], startCol=2)
-#' conditionalFormat(wb, 4, cols=1:2, rows=2:12, rule="$A$1<0", style = negStyle)
-#' conditionalFormat(wb, 4, cols=1:2, rows=2:12, rule="$A$1>0", style = posStyle)
+#' conditionalFormat(wb, 4, cols=1:2, rows=1:11, rule="$A$1<0", style = negStyle)
+#' conditionalFormat(wb, 4, cols=1:2, rows=1:11, rule="$A$1>0", style = posStyle)
 #' 
 #' ## colourscale colours cells based on cell value
 #' 
@@ -2417,7 +2544,7 @@ getDateOrigin <- function(xlsxFile){
 #' saveWorkbook(wb, "conditionalFormatExample.xlsx", overwrite = TRUE)
 conditionalFormat <- function(wb, sheet, cols, rows, rule = NULL, style = NULL, type = "expression"){
   
-  
+  warning("conditionalFormat() has been deprecated. Use conditionalFormatting().")
   ## Rule always applies to top left of sqref, $ determine which cells the rule depends on
   ## Rule for "databar" and colourscale are colours of length 2/3 or 1 respectively.
   
@@ -2489,6 +2616,485 @@ conditionalFormat <- function(wb, sheet, cols, rows, rule = NULL, style = NULL, 
   
 }
 
+
+
+
+#' @name all.equal
+#' @aliases all.equal.Workbook
+#' @export
+#' @method all.equal Workbook
+#' @title Check equality of workbooks
+#' @param target A \code{Workbook} object
+#' @param current A \code{Workbook} object
+#' @param ... ignored
+all.equal.Workbook <- function(target, current, ...){
+  
+  
+  print("Comparing workbooks...")
+  
+  
+  #   ".rels",
+  #   "app",
+  #   "charts",
+  #   "colWidths",
+  #   "Content_Types",
+  #   "core",
+  #   "dataCount",  
+  #   "drawings",
+  #   "drawings_rels", 
+  #   "hyperlinks",
+  #   "media", 
+  #   "freezePane",
+  #   "rowHeights",
+  #   "workbook",
+  #   "workbook.xml.rels",
+  #   "worksheets",
+  #   "worksheets_rels",
+  #   "sheetOrder"
+  #   "printerSettings",
+  #   "sharedStrings",
+  #   "sheetData",
+  #   "tables",
+  #   "tables.xml.rels",
+  #   "theme"
+  
+  
+  x <- target
+  y <- current
+  
+  
+  
+  
+  nSheets <- length(names(x))
+  
+  flag <- all(unlist(x$.rels) %in% unlist(y$.rels)) & all(unlist(y$.rels) %in% unlist(x$.rels))
+  if(!flag){
+    message(".rels not equal")
+    return(FALSE)
+  } 
+  
+  flag <- all(unlist(x$app) %in% unlist(y$app)) & all(unlist(y$app) %in% unlist(x$app))
+  if(!flag){
+    message("app not equal")
+    return(FALSE)
+  } 
+  
+  flag <- all(names(x$charts) %in% names(y$charts)) & all(names(y$charts) %in% names(x$charts))
+  if(!flag){
+    message("charts not equal")
+    return(FALSE)
+  } 
+  
+  flag <- all(sapply(1:nSheets, function(i) isTRUE(all.equal(x$colWidths[[i]], y$colWidths[[i]]))))
+  if(!flag){
+    message("colWidths not equal")
+    return(FALSE)
+  } 
+  
+  flag <- all(x$Content_Types %in% y$Content_Types) & all(y$Content_Types %in% x$Content_Types)
+  if(!flag){
+    message("Content_Types not equal")
+    return(FALSE)
+  } 
+  
+  flag <- all(unlist(x$core) == unlist(y$core))
+  if(!flag){
+    message("core not equal")
+    return(FALSE)
+  } 
+  
+  flag <- isTRUE(all.equal(unlist(x$dataCount), unlist(y$dataCount)))
+  if(!flag){
+    message("dataCount not equal")
+    return(FALSE)
+  } 
+  
+  flag <- all(unlist(x$drawings) %in% unlist(y$drawings)) & all(unlist(y$drawings) %in% unlist(x$drawings))
+  if(!flag){
+    message("drawings not equal")
+    return(FALSE)
+  } 
+  
+  flag <- all(unlist(x$drawings_rels) %in% unlist(y$drawings_rels)) & all(unlist(y$drawings_rels) %in% unlist(x$drawings_rels))
+  if(!flag){
+    message("drawings_rels not equal")
+    return(FALSE)
+  } 
+  
+  flag <- all(sapply(1:nSheets, function(i) isTRUE(all.equal(x$drawings_rels[[i]], y$drawings_rels[[i]]))))
+  if(!flag){
+    message("drawings_rels not equal")
+    return(FALSE)
+  } 
+  
+  flag <- all(sapply(1:nSheets, function(i) isTRUE(all.equal(x$freezePane[[i]], y$freezePane[[i]]))))
+  if(!flag){
+    message("freezePane not equal")
+    return(FALSE)
+  } 
+  
+  flag <- all(sapply(1:nSheets, function(i) isTRUE(all.equal(x$hyperlinks[[i]], y$hyperlinks[[i]]))))
+  if(!flag){
+    message("hyperlinks not equal")
+    return(FALSE)
+  } 
+  
+  flag <- all(names(x$media) %in% names(y$media) & names(y$media) %in% names(x$media))
+  if(!flag){
+    message("media not equal")
+    return(FALSE)
+  } 
+  
+  flag <- all(sapply(1:nSheets, function(i) isTRUE(all.equal(x$rowHeights[[i]], y$rowHeights[[i]]))))
+  if(!flag){
+    message("rowHeights not equal")
+    return(FALSE)
+  } 
+  
+  flag <- all(sapply(1:nSheets, function(i) isTRUE(all.equal(names(x$rowHeights[[i]]), names(y$rowHeights[[i]])))))
+  if(!flag){
+    message("Content_Types not equal")
+    return(FALSE)
+  } 
+  
+  flag <- all(x$sharedStrings %in% y$sharedStrings) & all(y$sharedStrings %in% x$sharedStrings) & (length(x$sharedStrings) == length(y$sharedStrings)) 
+  if(!flag){
+    message("sharedStrings not equal")
+    return(FALSE)
+  } 
+  
+  flag <- all(sapply(1:nSheets, function(i) isTRUE(all.equal(names(x$sheetData[[i]]), names(y$sheetData[[i]])))))
+  if(!flag){
+    message("names sheetData elements not equal")
+    return(FALSE)
+  } 
+  
+  flag <- sapply(1:nSheets, function(i) isTRUE(all.equal(x$sheetData[[i]], y$sheetData[[i]])))
+  if(!all(flag)){
+    
+    tmp_x <- x$sheetData[[which(!flag)[[1]]]]
+    tmp_y <- y$sheetData[[which(!flag)[[1]]]]
+    
+    tmp_x_e <- sapply(tmp_x, "[[", "r")
+    tmp_y_e <- sapply(tmp_y, "[[", "r")
+    flag <- paste0(tmp_x_e, "") != paste0(tmp_x_e, "")
+    if(any(flag)){
+      message(sprintf("sheetData %s not equal", which(!flag)[[1]]))
+      message(sprintf("r elements: %s", paste(which(flag), collapse = ", ")))
+      return(FALSE)
+    }
+    
+    tmp_x_e <- sapply(tmp_x, "[[", "t")
+    tmp_y_e <- sapply(tmp_y, "[[", "t")
+    flag <- paste0(tmp_x_e, "") != paste0(tmp_x_e, "")
+    if(any(flag)){
+      message(sprintf("sheetData %s not equal", which(!flag)[[1]]))
+      message(sprintf("t elements: %s", paste(which(isTRUE(flag)), collapse = ", ")))
+      return(FALSE)
+    }
+    
+    
+    tmp_x_e <- sapply(tmp_x, "[[", "v")
+    tmp_y_e <- sapply(tmp_y, "[[", "v")
+    flag <- paste0(tmp_x_e, "") != paste0(tmp_x_e, "")
+    if(any(flag)){
+      message(sprintf("sheetData %s not equal", which(!flag)[[1]]))
+      message(sprintf("v elements: %s", paste(which(flag), collapse = ", ")))
+      return(FALSE)
+    }
+    
+    tmp_x_e <- sapply(tmp_x, "[[", "f")
+    tmp_y_e <- sapply(tmp_y, "[[", "f")
+    flag <- paste0(tmp_x_e, "") != paste0(tmp_x_e, "")
+    if(any(flag)){
+      message(sprintf("sheetData %s not equal", which(!flag)[[1]]))
+      message(sprintf("f elements: %s", paste(which(flag), collapse = ", ")))
+      return(FALSE)
+    }
+  } 
+  
+  
+  flag <- all(names(x$styles) %in% names(y$styles)) & all(names(y$styles) %in% names(x$styles))
+  if(!flag){
+    message("names styles not equal")
+    return(FALSE)
+  } 
+  
+  flag <- all(unlist(x$styles) %in% unlist(y$styles)) & all(unlist(y$styles) %in% unlist(x$styles))
+  if(!flag){
+    message("styles not equal")
+    return(FALSE)
+  } 
+  
+  
+  flag <- length(x$styleObjects) == length(y$styleObjects)
+  if(!flag){
+    message("styleObjects lengths not equal")
+    return(FALSE)
+  } 
+  
+  
+  nStyles <- length(x$styleObjects)
+  if(nStyles > 0){
+    
+    for(i in 1:nStyles){
+      
+      sx <- x$styleObjects[[i]]
+      sy <- y$styleObjects[[i]]
+      
+      flag <- isTRUE(all.equal(sx$sheet, sy$sheet))
+      if(!flag){
+        message(sprintf("styleObjects '%s' sheet name not equal", i))
+        return(FALSE)
+      } 
+      
+      
+      flag <- isTRUE(all.equal(sx$rows, sy$rows))
+      if(!flag){
+        message(sprintf("styleObjects '%s' rows not equal", i))
+        return(FALSE)
+      } 
+      
+      flag <- isTRUE(all.equal(sx$cols, sy$cols))
+      if(!flag){
+        message(sprintf("styleObjects '%s' cols not equal", i))
+        return(FALSE)
+      } 
+      
+      ## check style class equality
+      flag <-isTRUE(all.equal(sx$style$fontName, sy$style$fontName))
+      if(!flag){
+        message(sprintf("styleObjects '%s' fontName not equal", i))
+        return(FALSE)
+      } 
+      
+      flag <-isTRUE(all.equal(sx$style$fontColour, sy$style$fontColour))
+      if(!flag){
+        message(sprintf("styleObjects '%s' fontColour not equal", i))
+        return(FALSE)
+      }
+      
+      flag <-isTRUE(all.equal(sx$style$fontSize, sy$style$fontSize))
+      if(!flag){
+        message(sprintf("styleObjects '%s' fontSize not equal", i))
+        return(FALSE)
+      } 
+      
+      flag <-isTRUE(all.equal(sx$style$fontFamily, sy$style$fontFamily))
+      if(!flag){
+        message(sprintf("styleObjects '%s' fontFamily not equal", i))
+        return(FALSE)
+      } 
+      
+      flag <-isTRUE(all.equal(sx$style$fontDecoration, sy$style$fontDecoration))
+      if(!flag){
+        message(sprintf("styleObjects '%s' fontDecoration not equal", i))
+        return(FALSE)
+      } 
+      
+      flag <-isTRUE(all.equal(sx$style$borderTop, sy$style$borderTop))
+      if(!flag){
+        message(sprintf("styleObjects '%s' borderTop not equal", i))
+        return(FALSE)
+      }
+      
+      flag <-isTRUE(all.equal(sx$style$borderLeft, sy$style$borderLeft))
+      if(!flag){
+        message(sprintf("styleObjects '%s' borderLeft not equal", i))
+        return(FALSE)
+      }
+      
+      flag <-isTRUE(all.equal(sx$style$borderRight, sy$style$borderRight))
+      if(!flag){
+        message(sprintf("styleObjects '%s' borderRight not equal", i))
+        return(FALSE)
+      }
+      
+      flag <-isTRUE(all.equal(sx$style$borderBottom, sy$style$borderBottom))
+      if(!flag){
+        message(sprintf("styleObjects '%s' borderBottom not equal", i))
+        return(FALSE)
+      }
+      
+      flag <-isTRUE(all.equal(sx$style$borderTopColour, sy$style$borderTopColour))
+      if(!flag){
+        message(sprintf("styleObjects '%s' borderTopColour not equal", i))
+        return(FALSE)
+      }
+      
+      flag <-isTRUE(all.equal(sx$style$borderLeftColour, sy$style$borderLeftColour))
+      if(!flag){
+        message(sprintf("styleObjects '%s' borderLeftColour not equal", i))
+        return(FALSE)
+      }
+      
+      flag <-isTRUE(all.equal(sx$style$borderRightColour, sy$style$borderRightColour))
+      if(!flag){
+        message(sprintf("styleObjects '%s' borderRightColour not equal", i))
+        return(FALSE)
+      }
+      
+      flag <-isTRUE(all.equal(sx$style$borderBottomColour, sy$style$borderBottomColour))
+      if(!flag){
+        message(sprintf("styleObjects '%s' borderBottomColour not equal", i))
+        return(FALSE)
+      }
+      
+      
+      flag <-isTRUE(all.equal(sx$style$halign, sy$style$halign))
+      if(!flag){
+        message(sprintf("styleObjects '%s' halign not equal", i))
+        return(FALSE)
+      }
+      
+      flag <-isTRUE(all.equal(sx$style$valign, sy$style$valign))
+      if(!flag){
+        message(sprintf("styleObjects '%s' valign not equal", i))
+        return(FALSE)
+      }
+      
+      flag <-isTRUE(all.equal(sx$style$indent, sy$style$indent))
+      if(!flag){
+        message(sprintf("styleObjects '%s' indent not equal", i))
+        return(FALSE)
+      }
+      
+      
+      flag <-isTRUE(all.equal(sx$style$textRotation, sy$style$textRotation))
+      if(!flag){
+        message(sprintf("styleObjects '%s' textRotation not equal", i))
+        return(FALSE)
+      }
+      
+      flag <-isTRUE(all.equal(sx$style$numFmt, sy$style$numFmt))
+      if(!flag){
+        message(sprintf("styleObjects '%s' numFmt not equal", i))
+        return(FALSE)
+      }
+      
+      flag <-isTRUE(all.equal(sx$style$fill, sy$style$fill))
+      if(!flag){
+        message(sprintf("styleObjects '%s' fill not equal", i))
+        return(FALSE)
+      }
+      
+      flag <-isTRUE(all.equal(sx$style$wrapText, sy$style$wrapText))
+      if(!flag){
+        message(sprintf("styleObjects '%s' wrapText not equal", i))
+        return(FALSE)
+      }
+      
+    }
+    
+  }
+  
+  
+  flag <- all(names(x$workbook) %in% names(y$workbook)) & all(names(y$workbook) %in% names(x$workbook))
+  if(!flag){
+    message("names workbook not equal")
+    return(FALSE)
+  } 
+  
+  flag <- all(unlist(x$workbook) %in% unlist(y$workbook)) & all(unlist(y$workbook) %in% unlist(x$workbook))
+  if(!flag){
+    message("workbook not equal")
+    return(FALSE)
+  } 
+  
+  flag <- all(unlist(x$workbook.xml.rels) %in% unlist(y$workbook.xml.rels)) & all(unlist(y$workbook.xml.rels) %in% unlist(x$workbook.xml.rels))
+  if(!flag){
+    message("workbook.xml.rels not equal")
+    return(FALSE)
+  } 
+  
+  
+  for(i in 1:nSheets){
+    
+    ws_x <- x$worksheets[[i]]
+    ws_y <- y$worksheets[[i]]
+    
+    flag <- all(names(ws_x) %in% names(ws_y)) & all(names(ws_y) %in% names(ws_x))
+    if(!flag){
+      message(sprintf("names of worksheet elements for sheet %s not equal", i))
+      return(FALSE)
+    } 
+    
+    nms <- names(ws_x)
+    for(j in nms){
+      
+      flag <- isTRUE(all.equal(gsub(" |\t", "", ws_x[[j]]), gsub(" |\t", "", ws_y[[j]]))) 
+      if(!flag){
+        message(sprintf("worksheet '%s', element '%s' not equal", i, j))
+        return(FALSE)
+      } 
+      
+    }
+    
+  }
+  
+  flag <- all(sapply(1:nSheets, function(i) isTRUE(all.equal(x$worksheets_rels[[i]], y$worksheets_rels[[i]]))))
+  if(!flag){
+    message("worksheets_rels not equal")
+    return(FALSE)
+  } 
+  
+  
+  flag <- all(unlist(x$sheetOrder) %in% unlist(y$sheetOrder)) & all(unlist(y$sheetOrder) %in% unlist(x$sheetOrder))
+  if(!flag){
+    message("sheetOrder not equal")
+    return(FALSE)
+  } 
+  
+  
+  flag <- length(x$tables) == length(y$tables)
+  if(!flag){
+    message("length of tables not equal")
+    return(FALSE)
+  } 
+  
+  flag <- all(names(x$tables) == names(y$tables))
+  if(!flag){
+    message("names of tables not equal")
+    return(FALSE)
+  } 
+  
+  flag <- all(unlist(x$tables) == unlist(y$tables))
+  if(!flag){
+    message("tables not equal")
+    return(FALSE)
+  } 
+  
+  
+  flag <- isTRUE(all.equal(x$tables.xml.rels, y$tables.xml.rels))
+  if(!flag){
+    message("tables.xml.rels not equal")
+    return(FALSE)
+  } 
+    
+  flag <- x$theme == y$theme
+  if(!flag){
+    message("theme not equal")
+    return(FALSE)
+  }
+  
+  
+  #   "connections",
+  #   "externalLinks",
+  #   "externalLinksRels",
+  #   "headFoot",
+  #   "pivotTables",
+  #   "pivotTables.xml.rels",
+  #   "pivotDefinitions",
+  #   "pivotRecords",
+  #   "pivotDefinitionsRels",
+  #   "queryTables",
+  #   "slicers",
+  #   "slicerCaches",
+  #   "vbaProject",
+  
+  
+  return(TRUE)
+}
 
 
 

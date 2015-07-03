@@ -1,4 +1,13 @@
 
+getRId <- function(x){
+  regmatches(x, gregexpr('(?<= r:id=")[0-9A-Za-z]+', x, perl = TRUE))
+}
+
+getId <- function(x){
+  regmatches(x, gregexpr('(?<= Id=")[0-9A-Za-z]+', x, perl = TRUE))
+}
+
+
 
 ## creates style object based on column classes
 ## Used in writeData for styling when no borders and writeData table for all column-class based styling
@@ -204,6 +213,37 @@ headerFooterSub <- function(x){
 }
 
 
+writeCommentXML <- function(comment_list, file_name){
+  
+  
+  authors <- unique(sapply(comment_list, "[[", "author"))
+  
+  write(x = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">', file = file_name)
+  
+  write(x = paste0('<authors>', paste(sprintf('<author>%s</author>', authors), collapse = ""), '</authors><commentList>'), file = file_name, append = TRUE, sep = "")
+  
+  for(i in 1:length(comment_list)){
+    
+    authorInd <- which(authors == comment_list[[i]]$author) - 1L
+    write(x = sprintf('<comment ref="%s" authorId="%s" shapeId="0"><text>', comment_list[[i]]$ref, authorInd),
+          file = file_name, append = TRUE, sep = "")
+    
+    for(j in 1:length(comment_list[[i]]$comment)){
+      write(x = sprintf('<r>%s<t xml:space="preserve">%s</t></r>', comment_list[[i]]$style[[j]], comment_list[[i]]$comment[[j]]),
+            file = file_name, append = TRUE, sep = "")
+    }
+   
+    write(x ='</text></comment>', file = file_name, append = TRUE, sep = "")
+    
+  }
+  
+  write(x = paste0('</commentList></comments>'), file = file_name, append = TRUE, sep = "")
+  
+  NULL
+  
+}
+
 
 
 replaceIllegalCharacters <- function(v){
@@ -211,13 +251,6 @@ replaceIllegalCharacters <- function(v){
   vEnc <- Encoding(v)
   v <- as.character(v)
   
-#   if("UTF-8" %in% vEnc){
-#     fromEnc <- "UTF-8"
-#   }else{
-#     fromEnc <- ""
-#   }
-#   v <- iconv(as.character(v), from = fromEnc, to = "UTF-8")
-
   flg <- vEnc != "UTF-8"
   if(any(flg))
     v[flg] <- iconv(v[flg], from = "", to = "UTF-8")
@@ -281,6 +314,23 @@ validateBorderStyle <- function(borderStyle){
 
 
 
+getAttrsFont <- function(xml, tag){
+  
+  
+  x <- lapply(xml, function(x) .Call("openxlsx_getChildlessNode", x, tag, PACKAGE = "openxlsx"))
+  x[sapply(x, length) == 0] <- ""
+  x <- unlist(x)
+  a <- lapply(x, function(x) unlist(regmatches(x, gregexpr('[a-zA-Z]+=".*?"', x))))
+  
+  nms = lapply(a, function(xml) regmatches(xml, regexpr('[a-zA-Z]+(?=\\=".*?")', xml, perl = TRUE)))
+  vals =  lapply(a, function(xml) regmatches(xml, regexpr('(?<=").*?(?=")', xml, perl = TRUE)))
+  vals <- lapply(vals, function(x) {Encoding(x) <- "UTF-8"; x})
+  vals <- lapply(1:length(vals), function(i){ names(vals[[i]]) <- nms[[i]]; vals[[i]]})
+
+  return(vals)
+  
+}
+
 getAttrs <- function(xml, tag){
   
   x <- lapply(xml, function(x) .Call("openxlsx_getChildlessNode", x, tag, PACKAGE = "openxlsx"))
@@ -289,6 +339,8 @@ getAttrs <- function(xml, tag){
   
   names = lapply(a, function(xml) regmatches(xml, regexpr('[a-zA-Z]+(?=\\=".*?")', xml, perl = TRUE)))
   vals =  lapply(a, function(xml) regmatches(xml, regexpr('(?<=").*?(?=")', xml, perl = TRUE)))
+  vals <- lapply(vals, function(x) {Encoding(x) <- "UTF-8"; x})
+  
   names(vals) <- names
   return(vals)
   
@@ -296,10 +348,10 @@ getAttrs <- function(xml, tag){
 
 
 buildFontList <- function(fonts){
-  
+
   sz <- getAttrs(fonts, "<sz ")
-  colour <- getAttrs(fonts, "<color ")
-  name <- getAttrs(fonts, "<name ")
+  colour <- getAttrsFont(fonts, "<color ")
+  name <- getAttrs(fonts, tag = "<name ")
   family <- getAttrs(fonts, "<family ")
   scheme <- getAttrs(fonts, "<scheme ")
   
@@ -425,7 +477,7 @@ buildBorder <- function(x){
   colNodes <- unlist(sapply(x, function(xml) .Call("openxlsx_getChildlessNode", xml, "<color", PACKAGE = "openxlsx"), USE.NAMES = FALSE))
   
   if(length(colNodes) > 0){
-    attrs <- regmatches(colNodes, regexpr('(theme|indexed|rgb)=".+"', colNodes))
+    attrs <- regmatches(colNodes, regexpr('(theme|indexed|rgb|auto)=".+"', colNodes))
   }else{
     attrs <- NULL
   }
@@ -571,3 +623,32 @@ getDefinedNamesSheet <- function(x){
   return(belongTo)
   
 }
+
+
+getSharedStringsFromFile <- function(sharedStringsFile, isFile){
+  
+  ## read in, get si tags, get t tag value and  pull out all string nodes
+  sharedStrings = .Call("openxlsx_getSharedStrings", sharedStringsFile, isFile, PACKAGE = 'openxlsx') ## read from file
+  
+  
+  Encoding(sharedStrings) <- "UTF-8"
+  z <- tolower(sharedStrings)
+  sharedStrings[z == "true"] <- "TRUE"
+  sharedStrings[z == "false"] <- "FALSE"
+  rm(z)
+  
+  ## XML replacements
+  sharedStrings <- replaceXMLEntities(sharedStrings)
+  
+  return(sharedStrings)
+  
+}
+
+
+clean_names <- function(x){
+  x <- gsub("^[[:space:]]+|[[:space:]]+$", "", x)
+  x <- gsub("[[:space:]]+", ".", x)
+  return(x)
+}
+
+

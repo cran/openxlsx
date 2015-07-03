@@ -48,36 +48,7 @@ Development version can be installed via GitHub once Rtools (Windows only) has b
 ```R
 install.packages(c("Rcpp", "devtools"), dependencies=TRUE)
 require(devtools)
-install_github("openxlsx", "awalker89")
-```
-
-
-
-On *some* Unix platforms, `install_github` has been [reported](https://github.com/hadley/devtools/issues/467) not to
-work as expected. The current workaround is as follows;
-simple bash script (eg named `r_install_github`):
-
-```bash
-#!/bin/bash
-# usage (eg):
-#    r_install_github devtools hadley
-
-cd /tmp && \
-rm -rf R_install_github && \
-mkdir R_install_github  && \
-cd R_install_github && \
-wget https://github.com/$2/$1/archive/master.zip && \
-unzip master.zip
-R CMD build $1-master && \
-R CMD INSTALL $1*.tar.gz && \
-cd /tmp && \
-rm -rf R_install_github
-```
-
-and to install `openxlsx` (after giving execution permissions and
-putting it in a `PATH` directory):
-```bash
-r_install_github openxlsx awalker89
+install_github("awalker89/openxlsx")
 ```
 
 ## Bug/feature request
