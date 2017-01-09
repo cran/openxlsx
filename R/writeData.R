@@ -39,6 +39,8 @@
 #'   }
 #' @param withFilter If \code{TRUE}, add filters to the column name row. NOTE can only have one filter per worksheet. 
 #' @param keepNA If \code{TRUE}, NA values are converted to #N/A in Excel else NA cells will be empty.
+#' @param name If not NULL, a named region is defined.
+#' @param sep Only applies to list columns. The seperator used to collapse list columns to a character vector e.g. sapply(x$list_column, paste, collapse = sep).
 #' @seealso \code{\link{writeDataTable}}
 #' @export writeData
 #' @details Formulae written using writeFormula to a Workbook object will not get picked up by read.xlsx().
@@ -48,15 +50,32 @@
 #' 
 #' ## See formatting vignette for further examples. 
 #' 
-#' wb <- createWorkbook()
+#' ## Options for default styling (These are the defaults)
+#' options("openxlsx.borderColour" = "black")
 #' options("openxlsx.borderStyle" = "thin")
+#' options("openxlsx.dateFormat" = "mm/dd/yyyy")
+#' options("openxlsx.datetimeFormat" = "yyyy-mm-dd hh:mm:ss")
+#' options("openxlsx.numFmt" = NULL)
+#' 
+#' ## Change the default border colour to #4F81BD
 #' options("openxlsx.borderColour" = "#4F81BD")
+#' 
+#' 
+#' #####################################################################################
+#' ## Create Workbook object and add worksheets
+#' wb <- createWorkbook()
+#' 
 #' ## Add worksheets
 #' addWorksheet(wb, "Cars")
+#' addWorksheet(wb, "Formula")
 #' 
 #' 
 #' x <- mtcars[1:6,]
 #' writeData(wb, "Cars", x, startCol = 2, startRow = 3, rowNames = TRUE)
+#' 
+#' #####################################################################################
+#' ## Bordering
+#' 
 #' writeData(wb, "Cars", x, rowNames = TRUE, startCol = "O", startRow = 3, 
 #'          borders="surrounding", borderColour = "black") ## black border
 #'
@@ -66,30 +85,41 @@
 #' writeData(wb, "Cars", x, rowNames = TRUE, 
 #'          startCol="O", startRow = 12, borders="rows")
 #'
-#' ## header styles
-#' hs1 <- createStyle(fgFill = "#DCE6F1", halign = "CENTER", textDecoration = "Italic",
+#'
+#' #####################################################################################
+#' ## Header Styles
+#' 
+#' hs1 <- createStyle(fgFill = "#DCE6F1", halign = "CENTER", textDecoration = "italic",
 #'                    border = "Bottom")
 #' 
 #' writeData(wb, "Cars", x, colNames = TRUE, rowNames = TRUE, startCol="B",
 #'      startRow = 23, borders="rows", headerStyle = hs1, borderStyle = "dashed")
 #' 
+#' 
 #' hs2 <- createStyle(fontColour = "#ffffff", fgFill = "#4F80BD",
-#'                    halign = "center", valign = "center", textDecoration = "Bold",
+#'                    halign = "center", valign = "center", textDecoration = "bold",
 #'                    border = "TopBottomLeftRight")
 #' 
 #' writeData(wb, "Cars", x, colNames = TRUE, rowNames = TRUE,
 #'           startCol="O", startRow = 23, borders="columns", headerStyle = hs2)
 #' 
-#' ## Write a hyperlink vector
-#' v <- rep("http://cran.r-project.org/", 4)
-#' names(v) <- paste("Hyperlink", 1:4) # Names will be used as display text
+#' 
+#' 
+#' 
+#' ##################################################################################### 
+#' ## Hyperlinks
+#' ## - vectors/columns with class 'hyperlink' are written as hyperlinks'
+#' 
+#' v <- rep("https://CRAN.R-project.org/", 4)
+#' names(v) <- paste("Hyperlink", 1:4) # Optional: names will be used as display text
 #' class(v) <- 'hyperlink'
 #' writeData(wb, "Cars", x = v, xy = c("B", 32))
 #'
 #'
-#'addWorksheet(wb, "Formula")
+#' ##################################################################################### 
+#' ## Formulas
+#' ## - vectors/columns with class 'formula' are written as formulas'
 #' 
-#' ## create column of class "formula"
 #' df <- data.frame(x=1:3, y = 1:3,
 #'                  z = paste(paste0("A", 1:3+1L), paste0("B", 1:3+1L), sep = " + "),
 #'                  stringsAsFactors = FALSE)
@@ -99,8 +129,10 @@
 #' writeData(wb, sheet = "Formula", x = df)
 #' 
 #' 
-#'
+#' ##################################################################################### 
 #' ## Save workbook
+#' ## Open in excel without saving file: openXL(wb)
+#' 
 #' saveWorkbook(wb, "writeDataExample.xlsx", overwrite = TRUE)
 writeData <- function(wb, 
                       sheet,
@@ -115,13 +147,22 @@ writeData <- function(wb,
                       borderColour = getOption("openxlsx.borderColour", "black"),
                       borderStyle = getOption("openxlsx.borderStyle", "thin"),
                       withFilter = FALSE,
-                      keepNA = FALSE){
+                      keepNA = FALSE,
+                      name = NULL,
+                      sep = ", "){
   
   ## increase scipen to avoid writing in scientific 
   exSciPen <- getOption("scipen")
-  options("scipen" = 10000)
+  options("scipen" = 200)
   on.exit(options("scipen" = exSciPen), add = TRUE)
   
+  
+  exDigits <- getOption("digits")
+  options("digits" = 22)
+  on.exit(options("digits" = exDigits), add = TRUE)
+
+  
+    
   if(is.null(x))
     return(invisible(0))
   
@@ -142,6 +183,7 @@ writeData <- function(wb,
   if(!is.logical(colNames)) stop("colNames must be a logical.")
   if(!is.logical(rowNames)) stop("rowNames must be a logical.")
   if(!is.null(headerStyle) & !"Style" %in% class(headerStyle)) stop("headerStyle must be a style object or NULL.")
+  if((!is.character(sep)) | (length(sep) != 1)) stop("sep must be a character vector of length 1")
   
   borders <- match.arg(borders)
   if(length(borders) != 1) stop("borders argument must be length 1.")    
@@ -164,7 +206,21 @@ writeData <- function(wb,
     colNames = FALSE
   }
 
-  if(is.vector(x) | is.factor(x))
+  ## named region
+  if(!is.null(name)){ ## validate name
+    ex_names <- regmatches(wb$workbook$definedNames, regexpr('(?<=name=")[^"]+', wb$workbook$definedNames, perl = TRUE))
+    ex_names <- replaceXMLEntities(ex_names)
+    
+    if(name %in% ex_names){
+      stop(sprintf("Named region with name '%s' already exists!", name))
+    }else if(grepl("[^A-Z0-9_\\.]", name[1], ignore.case = TRUE)){
+      stop("Invalid characters in name")
+    }else if(grepl('^[A-Z]{1,3}[0-9]+$', name)){
+      stop("name cannot look like a cell reference.")
+    }
+  }
+  
+  if(is.vector(x) | is.factor(x) | inherits(x, "Date"))
     colNames <- FALSE ## this will go to coerce.default and rowNames will be ignored 
   
   ## Coerce to data.frame
@@ -178,28 +234,52 @@ writeData <- function(wb,
     return(invisible(0))
     
   colClasses <- lapply(x, function(x) tolower(class(x)))
-  
-
+  colClasss2 <- colClasses
+  colClasss2[sapply(colClasses, function(x) "formula" %in% x) & sapply(colClasses, function(x) "hyperlink" %in% x)] <- "formula"
+    
   
   sheetX <- wb$validateSheet(sheet)
   if(wb$isChartSheet[[sheetX]]){
     stop("Cannot write to chart sheet.")
     return(NULL)
   }
-    
+
   ## write autoFilter, can only have a single filter per worksheet
-  if(withFilter)
-    wb$worksheets[[sheetX]]$autoFilter <- sprintf('<autoFilter ref="%s"/>', paste(getCellRefs(data.frame("x" = c(startRow, startRow), "y" = c(startCol, startCol + nCol - 1L))), collapse = ":"))
-  
+  if(withFilter){
+    
+    coords <- data.frame("x" = c(startRow, startRow + nRow + colNames - 1L), "y" = c(startCol, startCol + nCol - 1L))
+    ref <- paste(getCellRefs(coords), collapse = ":")
+    
+    wb$worksheets[[sheetX]]$autoFilter <- sprintf('<autoFilter ref="%s"/>', ref)
+    
+    l <- .Call("openxlsx_convert_to_excel_ref", unlist(coords[,2]), LETTERS, PACKAGE="openxlsx")
+    dfn <- sprintf("'%s'!%s", names(wb)[sheetX],  paste0("$", l, "$", coords[,1], collapse=":"))
+
+    dn <- sprintf('<definedName name="_xlnm._FilterDatabase" localSheetId="%s" hidden="1">%s</definedName>', sheetX - 1L, dfn)
+    
+    if(length(wb$workbook$definedNames) > 0){
+      
+      ind <- grepl('name="_xlnm._FilterDatabase"', wb$workbook$definedNames)
+      if(length(ind) > 0)
+        wb$workbook$definedNames[ind] <- dn  
+      
+    }else{
+      wb$workbook$definedNames <- dn
+    }
+    
+      
+  }
+    
   ## write data.frame
   wb$writeData(df = x,
                colNames = colNames,
                sheet = sheet,
                startCol = startCol,
                startRow = startRow,
-               colClasses = colClasses,
+               colClasses = colClasss2,
                hlinkNames = hlinkNames,
-               keepNA = keepNA)
+               keepNA = keepNA,
+               list_sep = sep)
   
   ## header style  
   if("Style" %in% class(headerStyle) & colNames)
@@ -211,6 +291,15 @@ writeData <- function(wb,
   ## If we don't have any rows to write return
   if(nRow == 0)
     return(invisible(0))
+  
+  ## named region
+  if(!is.null(name)){
+    
+    ref1 <- paste0("$", .Call("openxlsx_convert_to_excel_ref", startCol, LETTERS), "$", startRow)
+    ref2 <- paste0("$", .Call("openxlsx_convert_to_excel_ref", startCol + nCol - 1L, LETTERS), "$", startRow + nRow - 1L + colNames)
+    wb$createNamedRegion(ref1 = ref1, ref2 = ref2, name = name, sheet = wb$sheet_names[sheet])
+    
+  }
   
   
   ## hyperlink style, if no borders
@@ -335,6 +424,14 @@ writeData <- function(wb,
 #' ## Save workbook
 #' saveWorkbook(wb, "writeFormulaExample.xlsx", overwrite = TRUE)
 #' 
+#' 
+#' ## Writing internal hyperlinks
+#' wb <- createWorkbook()
+#' addWorksheet(wb, "Sheet1")
+#' addWorksheet(wb, "Sheet2")
+#' writeFormula(wb, "Sheet1", x = '=HYPERLINK("#Sheet2!B3", "Text to Display - Link to Sheet2")')
+#' saveWorkbook(wb, "writeFormulaHyperlinkExample.xlsx", overwrite = TRUE)
+#' 
 writeFormula <- function(wb, 
                          sheet,
                          x,
@@ -342,9 +439,16 @@ writeFormula <- function(wb,
                          startRow = 1, 
                          xy = NULL){
 
+  if(!"character" %in% class(x))
+    stop("x must be a character vector.")
   
   dfx <- data.frame("X" = x, stringsAsFactors = FALSE)
   class(dfx$X) <- c("character", "formula")
+  
+  if(any(grepl("^(=|)HYPERLINK\\(", x, ignore.case = TRUE)))
+    class(dfx$X) <- c("character", "formula", "hyperlink")
+    
+    
   
   writeData(wb = wb,
             sheet = sheet,

@@ -55,27 +55,24 @@ genClientData <- function(col, row, visible, height, width){
 }
 
 
-genBaseRels <- function(){
-  
-  list(
-    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>',
-    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>',
-    '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>'
-  )
-}
-
-
-genBaseApp <- function(){
-  list('<Application>Microsoft Excel</Application>')
-}
+# genBaseRels <- function(){
+#   
+#   '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+#    <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+#    <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>'
+#   
+# }
+# 
+# 
+# genBaseApp <- function(){
+#   list('<Application>Microsoft Excel</Application>')
+# }
 
 
 genBaseCore <- function(creator){  
-  
-  list('<dcterms:created xsi:type="dcterms:W3CDTF">2014-03-07T16:08:25Z</dcterms:created>',
-       sprintf('<dc:creator>%s</dc:creator>', creator))
-  
+  sprintf('<dcterms:created xsi:type="dcterms:W3CDTF">2014-03-07T16:08:25Z</dcterms:created><dc:creator>%s</dc:creator>', creator)
 } 
+
 
 genBaseWorkbook.xml.rels <- function(){
   
@@ -99,63 +96,7 @@ genBaseWorkbook <- function(){
   
 }
 
-genBaseSheet <- function(sheetName, 
-                         showGridLines = TRUE, 
-                         tabSelected = FALSE, 
-                         tabColour = NULL, 
-                         zoom = 100, 
-                         oddHeader, oddFooter, evenHeader, evenFooter, firstHeader, firstFooter){
-  
-  if(!is.null(tabColour))
-    tabColour <- sprintf('<sheetPr><tabColor rgb="%s"/></sheetPr>', tabColour)
-  
-  if(zoom < 10){
-    zoom <- 10
-  }else if(zoom > 400){
-    zoom <- 400
-  }
-  
-  naToNULLList <- function(x){
-    lapply(x, function(x) {
-      if(is.na(x))
-        return(NULL)
-      x})
-  }
-  
-  hf <- list(oddHeader = naToNULLList(oddHeader),
-             oddFooter = naToNULLList(oddFooter),
-             evenHeader = naToNULLList(evenHeader),
-             evenFooter = naToNULLList(evenFooter), 
-             firstHeader = naToNULLList(firstHeader),
-             firstFooter = naToNULLList(firstFooter))
-  
-  if(all(sapply(hf, length) == 0))
-    hf <- NULL
-  
-  ## list of all possible children
-  tmp <- list(list(sheetPr = tabColour,
-                   dimension = '<dimension ref="A1"/>',
-                   sheetViews = sprintf('<sheetViews><sheetView workbookViewId="0" zoomScale="%s" showGridLines="%s" tabSelected="%s"/></sheetViews>', as.integer(zoom), as.integer(showGridLines), as.integer(tabSelected)),
-                   sheetFormatPr = '<sheetFormatPr defaultRowHeight="15.0"/>',
-                   cols = NULL,
-                   sheetData = '<sheetData/>',
-                   autoFilter = NULL,
-                   mergeCells = NULL,
-                   conditionalFormatting = NULL,
-                   hyperlinks = NULL,
-                   pageMargins = '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>',
-                   pageSetup = '<pageSetup paperSize="9" orientation="portrait" horizontalDpi="300" verticalDpi="300" r:id="rId2"/>',  ## will always be 2
-                   headerFooter = hf,
-                   drawing = '<drawing r:id=\"rId1\"/>', ## will always be 1
-                   legacyDrawing = NULL,
-                   tableParts = NULL,
-                   extLst = NULL
-  ))
-  
-  names(tmp) <- sheetName
-  
-  return(tmp)
-}
+
 
 
 genBaseSheetRels <- function(sheetInd){
@@ -191,9 +132,10 @@ genBaseStyleSheet <- function(dxfs = NULL, tableStyles = NULL, extLst = NULL){
     
     tableStyles = tableStyles,
     
-    extLst = extLst,
+    indexedColors = NULL,
     
-    indexedColors = NULL
+    extLst = extLst
+    
   )
   
 }
@@ -246,34 +188,6 @@ genBaseTable <- function(id, ref, colNames){
 }
 
 
-
-
-genBaseChartSheet <- function(sheetName, 
-                              tabSelected = FALSE, 
-                              tabColour = NULL, 
-                              zoom = 100){
-  
-  if(!is.null(tabColour))
-    tabColour <- sprintf('<sheetPr>%s</sheetPr>', tabColour)
-  
-  if(zoom < 10){
-    zoom <- 10
-  }else if(zoom > 400){
-    zoom <- 400
-  }
-  
-  ## list of all possible children
-  tmp <- list(list(sheetPr = tabColour,
-                   sheetViews = sprintf('<sheetViews><sheetView workbookViewId="0" zoomScale="%s" tabSelected="%s"/></sheetViews>', as.integer(zoom), as.integer(tabSelected)),
-                   pageMargins = '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>',
-                   # pageSetup = '<pageSetup paperSize="9" orientation="portrait" horizontalDpi="300" verticalDpi="300" r:id="rId2"/>',  ## will always be 2
-                   drawing = '<drawing r:id=\"rId1\"/>' ## will always be 1
-  ))
-  
-  names(tmp) <- sheetName
-  
-  return(tmp)
-}
 
 
 
@@ -437,9 +351,7 @@ genBaseTheme <- function(){
 
 
 genPrinterSettings <- function(){
-  
   "5c 00 5c 00 41 00 55 00 43 00 41 00 4c 00 50 00 52 00 4f 00 44 00 46 00 50 00 5c 00 4c 00 31 00 34 00 78 00 65 00 72 00 6f 00 78 00 31 00 20 00 2d 00 20 00 58 00 65 00 72 00 6f 00 00 00 00 00 01 04 00 52 dc 00 5c 05 13 ff 81 07 02 00 09 00 9a 0b 34 08 64 00 01 00 0f 00 2c 01 02 00 02 00 2c 01 03 00 01 00 41 00 34 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 52 c0 21 46 00 58 00 20 00 41 00 70 00 65 00 6f 00 73 00 50 00 6f 00 72 00 74 00 2d 00 49 00 49 00 49 00 20 00 43 00 34 00 34 00 30 00 30 00 20 00 50 00 43 00 4c 00 20 00 36 00 00 00 00 00 00 00 00 00 4e 08 a0 13 40 09 08 00 0b 01 64 00 01 00 07 00 01 00 00 00 00 00 00 00 00 00 07 00 01 00 08 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 08 08 08 00 08 08 08 00 08 08 08 00 08 08 08 00 00 01 03 00 02 02 00 01 02 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 00 00 00 00 02 02 48 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 bc 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 00 00 00 00 00 00 08 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 0b 96 00 00 00 c8 00 01 01 01 01 01 01 01 01 01 01 01 01 09 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 bc 02 00 00 00 00 00 00 00 00 02 00 41 00 72 00 69 00 61 00 6c 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 01 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 12 70 5f 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
-  
 }
 
 
@@ -506,9 +418,7 @@ genSlicerCachesExtLst <- function(i){
     
     paste(sprintf('<x14:slicerCache r:id="rId%s"/>', i), collapse = ""),
     
-    '</x14:slicerCaches>
-    </ext>
-    </extLst>')
+    '</x14:slicerCaches></ext></extLst>')
   
   
 }

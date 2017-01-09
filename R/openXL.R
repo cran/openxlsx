@@ -37,11 +37,11 @@ openXL <- function(file = NULL){
   if (is.null(file)) stop("A file has to be specified.")
   
   ## workbook handling
-  if ("Workbook" == class(file)) {
+  if ("Workbook" %in% class(file)) {
     oldWD <- getwd()
+    on.exit(setwd(oldWD), add = TRUE)
     tmp <- file$saveWorkbook(quiet = TRUE)
     file <- file.path(tmp$tmpDir, tmp$tmpFile)
-    setwd(oldWD)
   }
   
   if (!file.exists(file)) stop("Non existent file or wrong path.")

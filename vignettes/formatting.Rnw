@@ -34,7 +34,7 @@ df <- data.frame("Date" = Sys.Date()-0:4,
                  "Logical" = c(TRUE, FALSE, TRUE, TRUE, FALSE),
                  "Currency" = paste("$",-2:2),
                  "Accounting" = -2:2,
-                 "hLink" = "http://cran.r-project.org/", 
+                 "hLink" = "https://CRAN.R-project.org/", 
                  "Percentage" = seq(-1, 1, length.out=5),
                  "TinyNumber" = runif(5) / 1E9, stringsAsFactors = FALSE)
 
@@ -177,7 +177,8 @@ options("openxlsx.datetimeFormat" = "yyyy-mm-dd hh:mm:ss")
 ## d, dd, ddd, dddd, m, mm, mmm, mmmm, mmmmm, yy, yyyy, h, hh, m, mm, s, ss, AM/PM
 
 ## numFmt == "LONGDATE" will use the date format specified by the above
-addStyle(wb, 1, style = createStyle(numFmt = "LONGDATE"), rows = 2:11, cols = 1, gridExpand = TRUE) 
+long_date_style <- createStyle(numFmt = "LONGDATE")
+addStyle(wb, 1, style = long_date_style, rows = 2:11, cols = 1, gridExpand = TRUE) 
 
 ## some custom date format examples
 sty <- createStyle(numFmt = "yyyy/mm/dd hh:mm:ss AM/PM")

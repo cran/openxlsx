@@ -1,4 +1,48 @@
 
+openxlsx 4.0.0
+----------------------------------------------------------------
+
+NEW FEATURES
+
+* Reduced RAM usage and improved performance
+
+* maintain vbaProject, slicers, pivotTables on load
+
+* Read and load from URL
+
+BUG FIXES
+
+* Fix date time conversion accuracy issues. 
+
+* Allow multibyte characters in names and comments.
+
+* Remove tolower() over style number formats to allow uppercase cell formatting
+
+* Stacking styles fixed.
+
+
+openxlsx 3.0.2
+----------------------------------------------------------------
+
+NEW FEATURES
+
+* "between" type for conditional formatting values in some interval.
+
+* colWidths parameter added to write.xlsx for auto column widths.
+
+* freezePane parameter handling added to write.xlsx.
+
+* visible parameter to addWorksheet to hide worksheets.
+
+* sheetVisible function to get and assign worksheet visibility state "hidden"/"visible"
+
+* pageBreak function to add page breaks to worksheets.
+
+BUG FIXES
+
+* keepNA paramter added to write.xlsx. Passed to writeData/writeDataTable
+
+
 openxlsx 3.0.1
 ----------------------------------------------------------------
 
@@ -128,6 +172,7 @@ BUG FIXES
 * sharedStrings now exact matches true/false to determine logical values from workbooks.
 
 * fomulas in column caused openxlsx to crash. This has been fixed.
+
 
 openxlsx 2.0.15
 ----------------------------------------------------------------

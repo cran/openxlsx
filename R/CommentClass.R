@@ -69,10 +69,11 @@ Comment$methods(show = function(){
 
 
 #' @name createComment
-#' @title write a cell comment
-#' @param comment Comment text. Character vector of length 1
+#' @title create a Comment object
+#' @description Create a cell Comment object to pass to writeComment()
+#' @param comment Comment text. Character vector.
 #' @param author Author of comment. Character vector of length 1
-#' @param style A Style object. See \code{\link{createStyle}}.
+#' @param style A Style object or list of style objects the same length as comment vector. See \code{\link{createStyle}}.
 #' @param visible TRUE or FALSE. Is comment visible.
 #' @param width Textbox integer width in number of cells
 #' @param height Textbox integer height in number of cells
@@ -144,6 +145,7 @@ createComment <- function(comment,
 
 #' @name writeComment
 #' @title write a cell comment
+#' @description Write a Comment object to a worksheet
 #' @param wb A workbook object
 #' @param sheet A vector of names or indices of worksheets
 #' @param col Column a column number of letter 
@@ -199,7 +201,7 @@ writeComment <- function(wb, sheet, col, row, comment, xy = NULL){
   if(!is.numeric(col))
     col <- convertFromExcelRef(col)
   
-  ref <- paste0(.Call("openxlsx_convert2ExcelRef", col, LETTERS), row)
+  ref <- paste0(.Call("openxlsx_convert_to_excel_ref", col, LETTERS), row)
   
   comment_list <- list("ref" = ref,
                        "author" = comment$author,
@@ -219,6 +221,7 @@ writeComment <- function(wb, sheet, col, row, comment, xy = NULL){
 
 #' @name removeComment
 #' @title Remove a comment from a cell
+#' @description Remove a cell comment from a worksheet
 #' @param wb A workbook object
 #' @param sheet A vector of names or indices of worksheets
 #' @param cols Columns to delete comments from
@@ -250,7 +253,7 @@ removeComment <- function(wb, sheet, cols, rows, gridExpand = TRUE){
     stop("Length of rows and cols must be equal.")
   }
   
-  comb <- paste0(.Call('openxlsx_convert2ExcelRef', cols, LETTERS, PACKAGE="openxlsx"), rows)
+  comb <- paste0(.Call('openxlsx_convert_to_excel_ref', cols, LETTERS, PACKAGE="openxlsx"), rows)
   toKeep <- !sapply(wb$comments[[sheet]], "[[", "ref") %in% comb
   
   wb$comments[[sheet]] <- wb$comments[[sheet]][toKeep]

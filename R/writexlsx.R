@@ -1,7 +1,8 @@
 
 
 #' @name write.xlsx
-#' @title write directly to an xlsx file
+#' @title write data to an xlsx file
+#' @description write a data.frame or list of data.frames to an xlsx file
 #' @author Alexander Walker
 #' @param x object or a list of objects that can be handled by \code{\link{writeData}} to write to file
 #' @param file xlsx file name
@@ -11,15 +12,29 @@
 #'   \item{createWorkbook}
 #'   \item{addWorksheet}
 #'   \item{writeData}
+#'   \item{freezePane}
 #'   \item{saveWorkbook}
 #' }
 #' 
 #' see details.
 #' @details Optional parameters are:
+#'
+#' \bold{createWorkbook Parameters}
 #' \itemize{
 #'   \item{\bold{creator}}{ A string specifying the workbook author}
+#' }
+#' 
+#' \bold{addWorksheet Parameters}
+#' \itemize{
 #'   \item{\bold{sheetName}}{ Name of the worksheet}
 #'   \item{\bold{gridLines}}{ A logical. If \code{FALSE}, the worksheet grid lines will be hidden.}
+#'   \item{\bold{tabColour}}{ Colour of the worksheet tab. A valid colour (belonging to colours()) 
+#'   or a valid hex colour beginning with "#".}
+#'   \item{\bold{zoom}}{ A numeric betwettn 10 and 400. Worksheet zoom level as a percentage.}
+#' }
+#' 
+#' \bold{writeData/writeDataTable Parameters}
+#' \itemize{
 #'   \item{\bold{startCol}}{ A vector specifiying the starting column(s) to write df}
 #'   \item{\bold{startRow}}{ A vector specifiying the starting row(s) to write df}
 #'   \item{\bold{xy}}{ An alternative to specifying startCol and startRow individually. 
@@ -32,8 +47,28 @@
 #' between each column.  If "\code{all}" all cell borders are drawn.}
 #'   \item{\bold{borderColour}}{ Colour of cell border}
 #'   \item{\bold{borderStyle}}{ Border line style.}
+#'   \item{\bold{keepNA}} {If \code{TRUE}, NA values are converted to #N/A in Excel else NA cells will be empty. Defaults to FALSE.}
+#' }
+#' 
+#' \bold{freezePane Parameters}
+#' \itemize{
+#'   \item{\bold{firstActiveRow}} {Top row of active region to freeze pane.}
+#'   \item{\bold{firstActiveCol}} {Furthest left column of active region to freeze pane.}
+#'   \item{\bold{firstRow}} {If \code{TRUE}, freezes the first row (equivalent to firstActiveRow = 2)}
+#'   \item{\bold{firstCol}} {If \code{TRUE}, freezes the first column (equivalent to firstActiveCol = 2)}
+#' }
+#' 
+#' \bold{colWidths Parameters}
+#' \itemize{
+#'   \item{\bold{colWidths}} {Must be value "auto". Sets all columns containing data to auto width.}
+#' }
+#' 
+#' 
+#' \bold{saveWorkbook Parameters}
+#' \itemize{
 #'   \item{\bold{overwrite}}{ Overwrite existing file (Defaults to TRUE as with write.table)}
 #' }
+#' 
 #' 
 #' columns of x with class Date or POSIXt are automatically
 #' styled as dates and datetimes respectively.
@@ -56,7 +91,7 @@
 #' 
 #' ## Lists elements are written to individual worksheets, using list names as sheet names if available
 #' l <- list("IRIS" = iris, "MTCATS" = mtcars, matrix(runif(1000), ncol = 5))
-#' write.xlsx(l, "writeList1.xlsx")
+#' write.xlsx(l, "writeList1.xlsx", colWidths = c(NA, "auto", "auto"))
 #' 
 #' ## different sheets can be given different parameters
 #' write.xlsx(l, "writeList2.xlsx", startCol = c(1,2,3), startRow = 2,
@@ -97,6 +132,7 @@ write.xlsx <- function(x, file, asTable = FALSE, ...){
   ## borders = NULL,
   ## borderColour = "#4F81BD"
   ## borderStyle
+  ## keepNA = FALSE
   
   #----writeDataTable---#
   ## startCol = 1
@@ -108,6 +144,13 @@ write.xlsx <- function(x, file, asTable = FALSE, ...){
   ## tableName = NULL
   ## headerStyle = NULL
   ## withFilter = TRUE
+  
+  #---freezePane---#
+  ## firstActiveRow = NULL
+  ## firstActiveCol = NULL
+  ## firstRow = FALSE
+  ## firstCol = FALSE
+  
   
   #---saveWorkbook---#
   #   overwrite = TRUE
@@ -140,7 +183,7 @@ write.xlsx <- function(x, file, asTable = FALSE, ...){
       stop("zoom must be numeric")
     }
   }
-
+  
   ## AddWorksheet
   gridLines <- TRUE
   if("gridLines" %in% names(params)){
@@ -160,7 +203,7 @@ write.xlsx <- function(x, file, asTable = FALSE, ...){
     }
   }
   
-
+  
   withFilter <- TRUE
   if("withFilter" %in% names(params)){
     if(is.logical(params$withFilter)){
@@ -267,15 +310,32 @@ write.xlsx <- function(x, file, asTable = FALSE, ...){
     borderStyle <- validateBorderStyle(params$borderStyle)
   }
   
+  keepNA <- FALSE
+  if("keepNA" %in% names(params)){
+    if(!"logical" %in% class(keepNA)){
+      stop("keepNA must be a logical.")
+    }else{
+      keepNA <- params$keepNA
+    }
+  }
+  
+  
   tableStyle <- "TableStyleLight9"
   if("tableStyle" %in% names(params))
     tableStyle <- params$tableStyle
   
   
+  ## auto column widths
+  colWidths <- ""
+  if("colWidths" %in% names(params))
+    colWidths <- params$colWidths
+  
+    
   ## create new Workbook object
   wb <- Workbook$new(creator)
-
+  
   ## If a list is supplied write to individual worksheets using names if available
+  nSheets <- 1
   if("list" %in% class(x)){
     
     nms <- names(x)
@@ -286,7 +346,7 @@ write.xlsx <- function(x, file, asTable = FALSE, ...){
     }else if(any("" %in% nms)){
       nms[nms %in% ""] <- paste("Sheet", (1:nSheets)[nms %in% ""])
     }else{
-      nms <- make.names(nms, unique  = TRUE)
+      nms <- make.unique(nms)
     }
     
     if(any(nchar(nms) > 31)){
@@ -309,10 +369,10 @@ write.xlsx <- function(x, file, asTable = FALSE, ...){
     
     if(length(startCol) != nSheets)
       startCol <- rep_len(startCol, length.out = nSheets)
-        
+    
     if(length(headerStyle) != nSheets & !is.null(headerStyle))
       headerStyle <- lapply(1:nSheets, function(x) headerStyle)
-        
+    
     if(length(borders) != nSheets & !is.null(borders))
       borders <- rep_len(borders, length.out = nSheets)
     
@@ -322,18 +382,24 @@ write.xlsx <- function(x, file, asTable = FALSE, ...){
     if(length(borderStyle) != nSheets)
       borderStyle <- rep_len(borderStyle, length.out = nSheets)
     
+    if(length(keepNA) != nSheets)
+      keepNA <- rep_len(keepNA, length.out = nSheets)
+    
     if(length(asTable) != nSheets)
       asTable <- rep_len(asTable, length.out = nSheets)
     
     if(length(tableStyle) != nSheets)
       tableStyle <- rep_len(tableStyle, length.out = nSheets)
     
+    if(length(colWidths) != nSheets)
+      colWidths <- rep_len(colWidths, length.out = nSheets)
+    
     for(i in 1:nSheets){
       
       wb$addWorksheet(nms[[i]], showGridLines = gridLines, tabColour = tabColour, zoom = zoom)
       
       if(asTable[i]){
-                
+        
         writeDataTable(wb = wb,
                        sheet = i,
                        x = x[[i]],
@@ -345,7 +411,8 @@ write.xlsx <- function(x, file, asTable = FALSE, ...){
                        tableStyle = tableStyle[[i]],
                        tableName = NULL,
                        headerStyle = headerStyle[[i]],
-                       withFilter = withFilter[[i]])
+                       withFilter = withFilter[[i]],
+                       keepNA = keepNA[[i]])
         
       }else{
         
@@ -360,9 +427,14 @@ write.xlsx <- function(x, file, asTable = FALSE, ...){
                   headerStyle = headerStyle[[i]],
                   borders = borders[[i]],
                   borderColour = borderColour[[i]],
-                  borderStyle = borderStyle[[i]])
+                  borderStyle = borderStyle[[i]],
+                  keepNA = keepNA[[i]])
         
       }
+      
+      if(colWidths[i] %in% "auto")
+        setColWidths(wb, sheet = i, cols =  1:ncol(x[[i]]) +  startCol[[i]] - 1L, widths = "auto")
+      
       
       
     }
@@ -387,10 +459,11 @@ write.xlsx <- function(x, file, asTable = FALSE, ...){
                      rowNames = rowNames,
                      tableStyle = tableStyle,
                      tableName = NULL,
-                     headerStyle = headerStyle)
+                     headerStyle = headerStyle,
+                     keepNA = keepNA)
       
     }else{
-            
+      
       writeData(wb = wb, 
                 sheet = 1,
                 x = x,
@@ -402,10 +475,64 @@ write.xlsx <- function(x, file, asTable = FALSE, ...){
                 headerStyle = headerStyle,
                 borders = borders,
                 borderColour = borderColour,
-                borderStyle = borderStyle)      
+                borderStyle = borderStyle,
+                keepNA = keepNA)      
     }
     
+    if(colWidths[1] %in% "auto")
+      setColWidths(wb, sheet = 1, cols =  1:ncol(x) +  startCol - 1L, widths = "auto")
+    
   }
+  
+  ###--Freeze Panes---###
+  ## firstActiveRow = NULL
+  ## firstActiveCol = NULL
+  ## firstRow = FALSE
+  ## firstCol = FALSE
+  
+  freezePanes <- FALSE
+  firstActiveRow <- rep_len(1L, length.out = nSheets)
+  if("firstActiveRow" %in% names(params)){
+    firstActiveRow <- params$firstActiveRow
+    freezePanes <- TRUE    
+    if(length(firstActiveRow) != nSheets)
+      firstActiveRow <- rep_len(firstActiveRow, length.out = nSheets)
+  }
+  
+  firstActiveCol <- rep_len(1L, length.out = nSheets)
+  if("firstActiveCol" %in% names(params)){
+    firstActiveCol <- params$firstActiveCol
+    freezePanes <- TRUE    
+    if(length(firstActiveCol) != nSheets)
+      firstActiveCol <- rep_len(firstActiveCol, length.out = nSheets)
+  }
+  
+  firstRow <- rep_len(FALSE, length.out = nSheets)
+  if("firstRow" %in% names(params)){
+    firstRow <- params$firstRow
+    freezePanes <- TRUE    
+    if("list" %in% class(x) & length(firstRow) != nSheets)
+      firstRow <- rep_len(firstRow, length.out = nSheets)
+  }
+  
+  firstCol <- rep_len(FALSE, length.out = nSheets)
+  if("firstCol" %in% names(params)){
+    firstCol <- params$firstCol
+    freezePanes <- TRUE    
+    if("list" %in% class(x) & length(firstCol) != nSheets)
+      firstCol <- rep_len(firstCol, length.out = nSheets)
+  }
+  
+  if(freezePanes){
+    for(i in 1:nSheets)
+      freezePane(wb = wb,
+                 sheet = i,
+                 firstActiveRow = firstActiveRow[i],
+                 firstActiveCol = firstActiveCol[i],
+                 firstRow = firstRow[i],
+                 firstCol = firstCol[i])
+  }
+  
   
   
   

@@ -6,16 +6,19 @@ test_that("Writing then reading returns identical data.frame 1", {
 
   ## data
   genDf <- function(){
+    
+    set.seed(1)
     data.frame("Date" = Sys.Date()-0:4,
                "Logical" = c(TRUE, FALSE, TRUE, TRUE, FALSE),
                "Currency" = -2:2,
                "Accounting" = -2:2,
-               "hLink" = "http://cran.r-project.org/", 
+               "hLink" = "https://CRAN.R-project.org/", 
                "Percentage" = seq(-1, 1, length.out=5),
                "TinyNumber" = runif(5) / 1E9, stringsAsFactors = FALSE)
   }
   
   df <- genDf()
+  df
   
   class(df$Currency) <- "currency"
   class(df$Accounting) <- "accounting"
@@ -154,7 +157,7 @@ test_that("Writing then reading returns identical data.frame 3", {
                "Logical" = c(TRUE, FALSE, TRUE, TRUE, FALSE),
                "Currency" = -2:2,
                "Accounting" = -2:2,
-               "hLink" = "http://cran.r-project.org/", 
+               "hLink" = "https://CRAN.R-project.org/", 
                "Percentage" = seq(-1, 1, length.out=5),
                "TinyNumber" = runif(5) / 1E9, stringsAsFactors = FALSE)
   }
@@ -200,6 +203,38 @@ test_that("Writing then reading returns identical data.frame 3", {
   unlink(fileName, recursive = TRUE, force = TRUE)
   
 })
+
+
+
+
+
+
+test_that("Writing then reading returns identical data.frame 4", {
+  
+  ## data
+  df <- head(iris[,1:4])
+  df[1,2] <- NA
+  df[3,1] <- NA
+  df[6, 4] <- NA
+  
+  
+  tf <- tempfile(fileext = ".xlsx")
+  write.xlsx(x = df, file = tf, keepNA = TRUE)
+  x <- read.xlsx(tf)
+  
+  expect_equal(object = x, expected = df, check.attributes = TRUE)
+  unlink(tf, recursive = TRUE, force = TRUE)
+  
+  
+  tf <- tempfile(fileext = ".xlsx")
+  write.xlsx(x = df, file = tf, keepNA = FALSE)
+  x <- read.xlsx(tf)
+  
+  expect_equal(object = x, expected = df, check.attributes = TRUE)
+  unlink(tf, recursive = TRUE, force = TRUE)
+  
+})
+
 
 
 

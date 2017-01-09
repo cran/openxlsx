@@ -1,4 +1,77 @@
 
+
+
+
+#' @name makeHyperlinkString
+#' @title create Excel hyperlink string
+#' @description Wrapper to create internal hyperlink string to pass to writeFormula()
+#' @param sheet Name of a worksheet
+#' @param row integer row number for hyperlink to link to
+#' @param col column number of letter for hyperlink to link to
+#' @param text display text 
+#' @param file Excel file name to point to. If NULL hyperlink is internal.
+#' @seealso \code{\link{writeFormula}}
+#' @export makeHyperlinkString
+#' @examples
+#' 
+#' ## Writing internal hyperlinks
+#' wb <- createWorkbook()
+#' addWorksheet(wb, "Sheet1")
+#' addWorksheet(wb, "Sheet2")
+#' addWorksheet(wb, "Sheet 3")
+#' writeData(wb, sheet = 3, x = iris)
+#' 
+#' ## External Hyperlink
+#' x <- c("https://www.google.com", "https://www.google.com.au")
+#' names(x) <- c("google", "google Aus")
+#' class(x) <- "hyperlink"
+#' 
+#' writeData(wb, sheet = 1, x = x, startCol = 10)
+#' 
+#' 
+#' ## Internal Hyperlink - create hyperlink formula manually
+#' writeFormula(wb, "Sheet1", x = '=HYPERLINK("#Sheet2!B3", "Text to Display - Link to Sheet2")'
+#'   , startCol = 3)
+#' 
+#' ## Internal - No text to display using makeHyperlinkString() function
+#' writeFormula(wb, "Sheet1", startRow = 1
+#' , x = makeHyperlinkString(sheet = "Sheet 3", row = 1, col = 2))
+#' 
+#' ## Internal - Text to display
+#' writeFormula(wb, "Sheet1", startRow = 2, 
+#'   x = makeHyperlinkString(sheet = "Sheet 3", row = 1, col = 2
+#'     , text = "Link to Sheet 3"))
+#' 
+#' ## Link to file - No text to display
+#' writeFormula(wb, "Sheet1", startRow = 4
+#'  , x = makeHyperlinkString(sheet = "testing", row = 3, col = 10
+#'    , file = system.file("loadExample.xlsx", package = "openxlsx")))
+#' 
+#' ## Link to file - Text to display
+#' writeFormula(wb, "Sheet1", startRow = 3
+#'   , x = makeHyperlinkString(sheet = "testing", row = 3, col = 10
+#'     , file = system.file("loadExample.xlsx", package = "openxlsx"), text = "Link to File."))
+#' 
+#' saveWorkbook(wb, "internalHyperlinks.xlsx")
+makeHyperlinkString <- function(sheet, row = 1, col = 1, text = NULL, file = NULL){
+  
+  cell <- paste0(int2col(col), row)
+  if(!is.null(file)){
+    dest <- sprintf("[%s]'%s'!%s", file, sheet, cell)
+  }else{
+    dest <- sprintf("#'%s'!%s", sheet, cell)  
+  }
+  
+  if(is.null(text)){
+    str <- sprintf("=HYPERLINK(\"%s\")", dest)
+  }else{
+    str <- sprintf("=HYPERLINK(\"%s\", \"%s\")", dest, text)
+  }
+  
+  return(str)
+}
+
+
 getRId <- function(x){
   regmatches(x, gregexpr('(?<= r:id=")[0-9A-Za-z]+', x, perl = TRUE))
 }
@@ -25,13 +98,13 @@ classStyles <- function(wb, sheet, startRow, startCol, colNames, nRow, colClasse
     
     ## style hyperlinks
     inds <- which(sapply(colClasses, function(x) "hyperlink" %in% x))
-    coords <- expand.grid(rowInds, inds +startCol)   
+
     hyperlinkstyle <- createStyle(textDecoration = "underline")
     hyperlinkstyle$fontColour <- list("theme"="10")
     styleElements <- list("style" = hyperlinkstyle,
-                          "sheet" =  names(wb$worksheets)[[sheet]],
-                          "rows" = coords[[1]],
-                          "cols" = coords[[2]])
+                          "sheet" =  wb$sheet_names[sheet],
+                          "rows" = rep.int(rowInds, times = length(inds)),
+                          "cols" = rep(inds + startCol, each = length(rowInds)))
     
     newStylesElements <- append(newStylesElements, list(styleElements))
     
@@ -41,11 +114,11 @@ classStyles <- function(wb, sheet, startRow, startCol, colNames, nRow, colClasse
     
     ## style dates
     inds <- which(sapply(colClasses, function(x) "date" %in% x)) 
-    coords <- expand.grid(rowInds, inds +startCol)   
+    
     styleElements <- list("style" = createStyle(numFmt = "date"),
-                          "sheet" =  names(wb$worksheets)[[sheet]],
-                          "rows" = coords[[1]],
-                          "cols" = coords[[2]])
+                          "sheet" =  wb$sheet_names[sheet],
+                          "rows" = rep.int(rowInds, times = length(inds)),
+                          "cols" = rep(inds + startCol, each = length(rowInds)))
     
     newStylesElements <- append(newStylesElements, list(styleElements))
     
@@ -55,12 +128,11 @@ classStyles <- function(wb, sheet, startRow, startCol, colNames, nRow, colClasse
     
     ## style POSIX
     inds <- which(sapply(colClasses, function(x) any(c("posixct", "posixt", "posixlt") %in% x)))
-    coords <- expand.grid(rowInds, inds +startCol)   
     
     styleElements <- list("style" = createStyle(numFmt = "LONGDATE"),
-                          "sheet" =  names(wb$worksheets)[[sheet]],
-                          "rows" = coords[[1]],
-                          "cols" = coords[[2]])
+                          "sheet" =  wb$sheet_names[sheet],
+                          "rows" = rep.int(rowInds, times = length(inds)),
+                          "cols" = rep(inds + startCol, each = length(rowInds)))
     
     newStylesElements <- append(newStylesElements, list(styleElements))
     
@@ -70,12 +142,11 @@ classStyles <- function(wb, sheet, startRow, startCol, colNames, nRow, colClasse
   ## style currency as CURRENCY
   if("currency" %in% allColClasses){
     inds <- which(sapply(colClasses, function(x) "currency" %in% x))
-    coords <- expand.grid(rowInds, inds +startCol)  
     
     styleElements <- list("style" = createStyle(numFmt = "CURRENCY"),
-                          "sheet" =  names(wb$worksheets)[[sheet]],
-                          "rows" = coords[[1]],
-                          "cols" = coords[[2]])
+                          "sheet" =  wb$sheet_names[sheet],
+                          "rows" = rep.int(rowInds, times = length(inds)),
+                          "cols" = rep(inds + startCol, each = length(rowInds)))
     
     newStylesElements <- append(newStylesElements, list(styleElements))
   }
@@ -83,12 +154,11 @@ classStyles <- function(wb, sheet, startRow, startCol, colNames, nRow, colClasse
   ## style accounting as ACCOUNTING
   if("accounting" %in% allColClasses){
     inds <- which(sapply(colClasses, function(x) "accounting" %in% x))
-    coords <- expand.grid(rowInds, inds +startCol)  
     
     styleElements <- list("style" = createStyle(numFmt = "ACCOUNTING"),
-                          "sheet" =  names(wb$worksheets)[[sheet]],
-                          "rows" = coords[[1]],
-                          "cols" = coords[[2]])
+                          "sheet" =  wb$sheet_names[sheet],
+                          "rows" = rep.int(rowInds, times = length(inds)),
+                          "cols" = rep(inds + startCol, each = length(rowInds)))
     
     newStylesElements <- append(newStylesElements, list(styleElements))
     
@@ -97,12 +167,11 @@ classStyles <- function(wb, sheet, startRow, startCol, colNames, nRow, colClasse
   ## style percentages
   if("percentage" %in% allColClasses){
     inds <- which(sapply(colClasses, function(x) "percentage" %in% x))
-    coords <- expand.grid(rowInds, inds +startCol)  
     
     styleElements <- list("style" = createStyle(numFmt = "percentage"),
-                          "sheet" =  names(wb$worksheets)[[sheet]],
-                          "rows" = coords[[1]],
-                          "cols" = coords[[2]])
+                          "sheet" =  wb$sheet_names[sheet],
+                          "rows" = rep.int(rowInds, times = length(inds)),
+                          "cols" = rep(inds + startCol, each = length(rowInds)))
     
     newStylesElements <- append(newStylesElements, list(styleElements))
   }
@@ -110,12 +179,11 @@ classStyles <- function(wb, sheet, startRow, startCol, colNames, nRow, colClasse
   ## style big mark
   if("scientific" %in% allColClasses){
     inds <- which(sapply(colClasses, function(x) "scientific" %in% x))
-    coords <- expand.grid(rowInds, inds +startCol)  
-    
+
     styleElements <- list("style" = createStyle(numFmt = "scientific"),
-                          "sheet" =  names(wb$worksheets)[[sheet]],
-                          "rows" = coords[[1]],
-                          "cols" = coords[[2]])
+                          "sheet" =  wb$sheet_names[sheet],
+                          "rows" = rep.int(rowInds, times = length(inds)),
+                          "cols" = rep(inds + startCol, each = length(rowInds)))
     
     newStylesElements <- append(newStylesElements, list(styleElements))
   }
@@ -123,25 +191,23 @@ classStyles <- function(wb, sheet, startRow, startCol, colNames, nRow, colClasse
   ## style big mark
   if("3" %in% allColClasses | "comma" %in% allColClasses){
     inds <- which(sapply(colClasses, function(x) "3" %in% tolower(x) | "comma" %in% tolower(x)))
-    coords <- expand.grid(rowInds, inds +startCol)  
-    
+
     styleElements <- list("style" = createStyle(numFmt = "3"),
-                          "sheet" =  names(wb$worksheets)[[sheet]],
-                          "rows" = coords[[1]],
-                          "cols" = coords[[2]])
+                          "sheet" =  wb$sheet_names[sheet],
+                          "rows" = rep.int(rowInds, times = length(inds)),
+                          "cols" = rep(inds + startCol, each = length(rowInds)))
     
     newStylesElements <- append(newStylesElements, list(styleElements))
   }
   
   ## numeric sigfigs (Col must be numeric and numFmt options must only have 0s and \\.)
-  if("numeric" %in% allColClasses & !grepl("[^0\\.,#\\$\\* ]", getOption("openxlsx.numFmt", "GENERAL")) ){
+  if("numeric" %in% allColClasses & !grepl("[^0\\.,#\\$\\* %]", getOption("openxlsx.numFmt", "GENERAL")) ){
     inds <- which(sapply(colClasses, function(x) "numeric" %in% tolower(x)))
-    coords <- expand.grid(rowInds, inds +startCol)
     
     styleElements <- list("style" = createStyle(numFmt = getOption("openxlsx.numFmt", "0")),
-                          "sheet" =  names(wb$worksheets)[[sheet]],
-                          "rows" = coords[[1]],
-                          "cols" = coords[[2]])
+                          "sheet" =  wb$sheet_names[sheet],
+                          "rows" = rep.int(rowInds, times = length(inds)),
+                          "cols" = rep(inds + startCol, each = length(rowInds)))
     
     newStylesElements <- append(newStylesElements, list(styleElements))
   }
@@ -217,29 +283,24 @@ writeCommentXML <- function(comment_list, file_name){
   
   
   authors <- unique(sapply(comment_list, "[[", "author"))
+  xml <- '<comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+  xml <- c(xml, paste0('<authors>', paste(sprintf('<author>%s</author>', authors), collapse = ""), '</authors><commentList>'))
   
-  write(x = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-        <comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">', file = file_name)
-  
-  write(x = paste0('<authors>', paste(sprintf('<author>%s</author>', authors), collapse = ""), '</authors><commentList>'), file = file_name, append = TRUE, sep = "")
-  
+
   for(i in 1:length(comment_list)){
     
     authorInd <- which(authors == comment_list[[i]]$author) - 1L
-    write(x = sprintf('<comment ref="%s" authorId="%s" shapeId="0"><text>', comment_list[[i]]$ref, authorInd),
-          file = file_name, append = TRUE, sep = "")
+    xml <- c(xml, sprintf('<comment ref="%s" authorId="%s" shapeId="0"><text>', comment_list[[i]]$ref, authorInd))
     
-    for(j in 1:length(comment_list[[i]]$comment)){
-      write(x = sprintf('<r>%s<t xml:space="preserve">%s</t></r>', comment_list[[i]]$style[[j]], comment_list[[i]]$comment[[j]]),
-            file = file_name, append = TRUE, sep = "")
-    }
-   
-    write(x ='</text></comment>', file = file_name, append = TRUE, sep = "")
+    for(j in 1:length(comment_list[[i]]$comment))
+      xml <- c(xml, sprintf('<r>%s<t xml:space="preserve">%s</t></r>', comment_list[[i]]$style[[j]], comment_list[[i]]$comment[[j]]))
+    
+    xml <- c(xml, '</text></comment>')
     
   }
   
-  write(x = paste0('</commentList></comments>'), file = file_name, append = TRUE, sep = "")
-  
+  .Call("openxlsx_writeFile", '', paste(xml, collapse = ""), '</commentList></comments>', file_name)
+
   NULL
   
 }
@@ -255,11 +316,11 @@ replaceIllegalCharacters <- function(v){
   if(any(flg))
     v[flg] <- iconv(v[flg], from = "", to = "UTF-8")
   
-  v <- gsub('&', "&amp;", v)
-  v <- gsub('"', "&quot;", v)
-  v <- gsub("'", "&apos;", v)
-  v <- gsub('<', "&lt;", v)
-  v <- gsub('>', "&gt;", v)
+  v <- gsub('&', "&amp;", v, fixed = TRUE)
+  v <- gsub('"', "&quot;", v, fixed = TRUE)
+  v <- gsub("'", "&apos;", v, fixed = TRUE)
+  v <- gsub('<', "&lt;", v, fixed = TRUE)
+  v <- gsub('>', "&gt;", v, fixed = TRUE)
   
   return(v)
 }
@@ -267,11 +328,11 @@ replaceIllegalCharacters <- function(v){
 
 replaceXMLEntities <- function(v){
   
-  v <- gsub("&amp;", "&", v)
-  v <- gsub("&quot;", '"', v)
-  v <- gsub("&apos;", "'", v)
-  v <- gsub("&lt;", "<", v)
-  v <- gsub("&gt;", ">", v)
+  v <- gsub("&amp;", "&", v, fixed = TRUE)
+  v <- gsub("&quot;", '"', v, fixed = TRUE)
+  v <- gsub("&apos;", "'", v, fixed = TRUE)
+  v <- gsub("&lt;", "<", v, fixed = TRUE)
+  v <- gsub("&gt;", ">", v, fixed = TRUE)
   
   return(v)
 }
@@ -326,7 +387,7 @@ getAttrsFont <- function(xml, tag){
   vals =  lapply(a, function(xml) regmatches(xml, regexpr('(?<=").*?(?=")', xml, perl = TRUE)))
   vals <- lapply(vals, function(x) {Encoding(x) <- "UTF-8"; x})
   vals <- lapply(1:length(vals), function(i){ names(vals[[i]]) <- nms[[i]]; vals[[i]]})
-
+  
   return(vals)
   
 }
@@ -348,7 +409,7 @@ getAttrs <- function(xml, tag){
 
 
 buildFontList <- function(fonts){
-
+  
   sz <- getAttrs(fonts, "<sz ")
   colour <- getAttrsFont(fonts, "<color ")
   name <- getAttrs(fonts, tag = "<name ")
@@ -601,10 +662,9 @@ buildFillList <- function(fills){
   inds <- grepl("patternFill", fills)
   fillAttrs[inds] <- lapply(fills[inds], nodeAttributes)
   
-  
   ## gradientFill
   inds <- grepl("gradientFill", fills)
-  fillAttrs[inds] <- lapply(fills[inds], function(x) .Call("openxlsx_getNodes", x, "<gradientFill>", PACKAGE = "openxlsx"))
+  fillAttrs[inds] <- fills[inds] #lapply(fills[inds], function(x) .Call("openxlsx_getNodes", x, "<gradientFill>", PACKAGE = "openxlsx"))
   
   return(fillAttrs)
   
@@ -628,14 +688,14 @@ getDefinedNamesSheet <- function(x){
 getSharedStringsFromFile <- function(sharedStringsFile, isFile){
   
   ## read in, get si tags, get t tag value and  pull out all string nodes
-  sharedStrings = .Call("openxlsx_getSharedStrings", sharedStringsFile, isFile, PACKAGE = 'openxlsx') ## read from file
+  sharedStrings = .Call("openxlsx_get_shared_strings", sharedStringsFile, isFile, PACKAGE = 'openxlsx') ## read from file
   
   
   Encoding(sharedStrings) <- "UTF-8"
   z <- tolower(sharedStrings)
   sharedStrings[z == "true"] <- "TRUE"
   sharedStrings[z == "false"] <- "FALSE"
-  rm(z)
+  z <- NULL ## effectivel remove z
   
   ## XML replacements
   sharedStrings <- replaceXMLEntities(sharedStrings)
@@ -651,4 +711,90 @@ clean_names <- function(x){
   return(x)
 }
 
+
+
+mergeCell2mapping <- function(x){
+  
+  refs <- regmatches(x, regexpr("(?<=ref=\")[A-Z0-9:]+", x, perl = TRUE))
+  refs <- strsplit(refs, split = ":")
+  rows <- lapply(refs, function(r) {
+    r <- as.integer(gsub("[A-Z]", "", r))
+    seq(from = r[1], to = r[2], by = 1)
+  })
+  
+  cols <- lapply(refs, function(r) {
+    r <- convertFromExcelRef(r)
+    seq(from = r[1], to = r[2], by = 1)
+  })
+  
+  ## for each we grid.expand
+  refs <- do.call("rbind", lapply(1:length(rows), function(i){
+    tmp <- expand.grid("cols" = cols[[i]], "rows" = rows[[i]])
+    tmp$ref <- paste0(.Call("openxlsx_convert_to_excel_ref", tmp$cols, LETTERS), tmp$rows)
+    tmp$anchor_cell <- tmp$ref[1]
+    return(tmp[, c("anchor_cell", "ref", "rows")])
+  }))
+  
+  
+  refs <- refs[refs$anchor_cell != refs$ref,  ]
+  
+  return(refs)
+}
+
+
+
+
+splitHeaderFooter <- function(x){
+  
+  tmp <- gsub("<(/|)(odd|even|first)(Header|Footer)>(&amp;|)", "", x, perl = TRUE)
+  special_tags <- regmatches(tmp, regexpr("&amp;[^LCR]", tmp))
+  if(length(special_tags) > 0){
+    for(i in 1:length(special_tags))
+      tmp <- gsub(special_tags[i], sprintf("openxlsx__%s67298679", i), tmp, fixed = TRUE)
+  }
+  
+  tmp <- strsplit(tmp, split = "&amp;")[[1]]
+  
+  if(length(special_tags) > 0){
+    for(i in 1:length(special_tags))
+      tmp <- gsub(sprintf("openxlsx__%s67298679", i), special_tags[i], tmp, fixed = TRUE)
+  }
+  
+  
+  res <- rep(list(NULL), 3)
+  ind <- substr(tmp, 1, 1) == "L"
+  if(any(ind))
+    res[[1]] = substring(tmp, 2)[ind]
+  
+  ind <- substr(tmp, 1, 1) == "C"
+  if(any(ind))
+    res[[2]] = substring(tmp, 2)[ind]
+  
+  ind <- substr(tmp, 1, 1) == "R"
+  if(any(ind))
+    res[[3]] = substring(tmp, 2)[ind]
+  
+  res
+  
+}
+
+
+
+
+getFile <- function(xlsxFile){
+  
+  ## Is this a file or URL (code taken from read.table())
+  on.exit(try(close(fl), silent = TRUE), add = TRUE)
+  fl <- file(description = xlsxFile)
+  
+  ## If URL download
+  if("url" %in% class(fl)){
+    tmpFile <- tempfile(fileext = ".xlsx")
+    download.file(url = xlsxFile, destfile = tmpFile, cacheOK = FALSE,  mode = "wb", quiet = TRUE)
+    xlsxFile <- tmpFile
+  }
+  
+  return(xlsxFile)
+  
+}
 
