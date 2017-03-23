@@ -4,7 +4,8 @@
 \alias{setColWidths}
 \title{Set worksheet column widths}
 \usage{
-setColWidths(wb, sheet, cols, widths, ignoreMergedCells = FALSE)
+setColWidths(wb, sheet, cols, widths = 8.43, hidden = rep(FALSE,
+  length(cols)), ignoreMergedCells = FALSE)
 }
 \arguments{
 \item{wb}{A workbook object}
@@ -13,8 +14,10 @@ setColWidths(wb, sheet, cols, widths, ignoreMergedCells = FALSE)
 
 \item{cols}{Indices of cols to set width}
 
-\item{widths}{widths to set rows to specified in Excel column width units or "auto" for automatic sizing. The widths argument is
+\item{widths}{widths to set cols to specified in Excel column width units or "auto" for automatic sizing. The widths argument is
 recycled to the length of cols.}
+
+\item{hidden}{Logical vector. If TRUE the column is hidden.}
 
 \item{ignoreMergedCells}{Ignore any cells that have been merged with other cells in the calculation of "auto" column widths.}
 }
@@ -49,10 +52,9 @@ setColWidths(wb, sheet = 2, cols = 1:5, widths = "auto")
 ## Save workbook
 saveWorkbook(wb, "setColWidthsExample.xlsx", overwrite = TRUE)
 }
-\author{
-Alexander Walker
-}
 \seealso{
 \code{\link{removeColWidths}}
 }
-
+\author{
+Alexander Walker
+}

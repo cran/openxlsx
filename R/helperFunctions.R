@@ -84,7 +84,7 @@ getId <- function(x){
 
 ## creates style object based on column classes
 ## Used in writeData for styling when no borders and writeData table for all column-class based styling
-classStyles <- function(wb, sheet, startRow, startCol, colNames, nRow, colClasses){
+classStyles <- function(wb, sheet, startRow, startCol, colNames, nRow, colClasses, stack = TRUE){
   
   sheet = wb$validateSheet(sheet)
   allColClasses <- unlist(colClasses, use.names = FALSE)
@@ -172,7 +172,7 @@ classStyles <- function(wb, sheet, startRow, startCol, colNames, nRow, colClasse
                           "sheet" =  wb$sheet_names[sheet],
                           "rows" = rep.int(rowInds, times = length(inds)),
                           "cols" = rep(inds + startCol, each = length(rowInds)))
-    
+
     newStylesElements <- append(newStylesElements, list(styleElements))
   }
   
@@ -213,8 +213,24 @@ classStyles <- function(wb, sheet, startRow, startCol, colNames, nRow, colClasse
   }
   
   
-  if(!is.null(newStylesElements))
-    wb$styleObjects <- append(wb$styleObjects, newStylesElements)
+  if(!is.null(newStylesElements)){
+    
+    if(stack){
+      
+      for(i in 1:length(newStylesElements)){
+        wb$addStyle(sheet = sheet
+                    , style = newStylesElements[[i]]$style
+                    , rows = newStylesElements[[i]]$rows
+                    , cols = newStylesElements[[i]]$cols, stack = TRUE)
+      }
+      
+      
+    }else{
+      wb$styleObjects <- append(wb$styleObjects, newStylesElements)
+    }
+    
+  }
+    
   
   
   invisible(1)
@@ -299,7 +315,7 @@ writeCommentXML <- function(comment_list, file_name){
     
   }
   
-  .Call("openxlsx_writeFile", '', paste(xml, collapse = ""), '</commentList></comments>', file_name)
+  .Call("openxlsx_writeFile", '', paste(xml, collapse = ""), '</commentList></comments>', file_name, PACKAGE = "openxlsx")
 
   NULL
   
@@ -478,6 +494,32 @@ buildFontList <- function(fonts){
 }
 
 
+
+get_named_regions_from_string <- function(dn){
+  
+  dn <- gsub("</definedNames>", "", dn, fixed = TRUE)
+  dn <- gsub("</workbook>", "", dn, fixed = TRUE)
+  
+  dn <- unique(unlist(strsplit(dn, split = "</definedName>", fixed = TRUE)))
+  
+  dn_names <- regmatches(dn, regexpr('(?<=name=")[^"]+', dn, perl = TRUE))
+  
+  dn_pos <- regmatches(dn, regexpr("(?<=>).*", dn, perl = TRUE))
+  dn_coords <- regmatches(dn_pos, regexpr("(?<=!).*", dn_pos, perl = TRUE))
+  dn_coords <- gsub("$", "", dn_coords, fixed = TRUE)
+  
+  dn_sheets <- regmatches(dn_pos, regexpr(".*(?=!)", dn_pos, perl = TRUE))
+  dn_sheets <- gsub("'", "", dn_sheets, fixed = TRUE)
+  
+  attr(dn_names, "sheet") <- dn_sheets
+  attr(dn_names, "position") <- dn_coords
+  
+  return(dn_names)
+  
+}
+
+
+
 nodeAttributes <- function(x){
   
   
@@ -522,7 +564,7 @@ buildBorder <- function(x){
     if(length(tmp) == 1)
       sideBorder[[i]] <- tmp
   }
-  
+
   sideBorder <- sideBorder[sideBorder != ""]
   x <- x[sideBorder != ""]
   if(length(sideBorder) == 0)
@@ -530,7 +572,7 @@ buildBorder <- function(x){
   
   
   ## style
-  weight <- gsub('style=|"', "", regmatches(x, regexpr('style="[a-z]+"', x, perl = TRUE)))
+  weight <- gsub('style=|"', "", regmatches(x, regexpr('style="[a-z]+"', x, perl = TRUE, ignore.case = TRUE)))
   
   
   ## Colours
@@ -730,7 +772,7 @@ mergeCell2mapping <- function(x){
   ## for each we grid.expand
   refs <- do.call("rbind", lapply(1:length(rows), function(i){
     tmp <- expand.grid("cols" = cols[[i]], "rows" = rows[[i]])
-    tmp$ref <- paste0(.Call("openxlsx_convert_to_excel_ref", tmp$cols, LETTERS), tmp$rows)
+    tmp$ref <- paste0(.Call("openxlsx_convert_to_excel_ref", tmp$cols, LETTERS, PACKAGE = "openxlsx"), tmp$rows)
     tmp$anchor_cell <- tmp$ref[1]
     return(tmp[, c("anchor_cell", "ref", "rows")])
   }))

@@ -5,7 +5,7 @@
 #' 
 #' @name openxlsx
 #' @docType package
-#' @useDynLib openxlsx
+#' @useDynLib openxlsx, .registration=TRUE
 #' @import grDevices
 #' @import stats
 #' @import utils
@@ -35,5 +35,14 @@
 #'    \item{\code{options("openxlsx.orientation" = "portrait")}} ## page orientation
 #' } 
 #'  See the Formatting vignette for examples. 
+#' 
+#' 
+#' 
+#' 
+#' Additional options
+#' 
+#' \itemize{
+#' \item{\code{options("openxlsx.zipFlags" = "-9")}} ## set max zip compression level default is "-1"
+#' } 
 #' 
 NULL

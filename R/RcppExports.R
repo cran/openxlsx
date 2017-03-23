@@ -81,8 +81,8 @@ getCellInfo <- function(xmlFile, sharedStrings, skipEmptyRows, startRow, rows, g
     .Call('openxlsx_getCellInfo', PACKAGE = 'openxlsx', xmlFile, sharedStrings, skipEmptyRows, startRow, rows, getDates)
 }
 
-read_workbook <- function(cols_in, rows_in, v, string_inds, is_date, hasColNames, skipEmptyRows, skipEmptyCols, clean_names) {
-    .Call('openxlsx_read_workbook', PACKAGE = 'openxlsx', cols_in, rows_in, v, string_inds, is_date, hasColNames, skipEmptyRows, skipEmptyCols, clean_names)
+read_workbook <- function(cols_in, rows_in, v, string_inds, is_date, hasColNames, skipEmptyRows, skipEmptyCols, nRows, clean_names) {
+    .Call('openxlsx_read_workbook', PACKAGE = 'openxlsx', cols_in, rows_in, v, string_inds, is_date, hasColNames, skipEmptyRows, skipEmptyCols, nRows, clean_names)
 }
 
 calc_number_rows <- function(x, skipEmptyRows) {
@@ -129,8 +129,8 @@ matrixRowInds <- function(indices) {
     .Call('openxlsx_matrixRowInds', PACKAGE = 'openxlsx', indices)
 }
 
-build_table_xml <- function(table, ref, colNames, showColNames, tableStyle, withFilter) {
-    .Call('openxlsx_build_table_xml', PACKAGE = 'openxlsx', table, ref, colNames, showColNames, tableStyle, withFilter)
+build_table_xml <- function(table, tableStyleXML, ref, colNames, showColNames, withFilter) {
+    .Call('openxlsx_build_table_xml', PACKAGE = 'openxlsx', table, tableStyleXML, ref, colNames, showColNames, withFilter)
 }
 
 write_worksheet_xml_2 <- function(prior, post, sheet_data, row_heights, R_fileName) {

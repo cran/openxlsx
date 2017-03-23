@@ -59,11 +59,17 @@ read.xlsx.Workbook <- function(xlsxFile,
     
     region <- gsub("[^A-Z0-9:]", "", gsub(sheet, "", region, fixed = TRUE))
     
-    cols <- unlist(lapply(strsplit(region, split = ":", fixed = TRUE), convertFromExcelRef))
-    rows <- unlist(lapply(strsplit(region, split = ":", fixed = TRUE), function(x) as.integer(gsub("[A-Z]", "", x))))
+    if (grepl(":", region, fixed = TRUE)) {
+      cols <- unlist(lapply(strsplit(region, split = ":", fixed = TRUE), convertFromExcelRef))
+      rows <- unlist(lapply(strsplit(region, split = ":", fixed = TRUE), function(x) as.integer(gsub("[A-Z]", "", x))))
     
-    cols <- seq(from = cols[1], to = cols[2], by = 1)
-    rows <- seq(from = rows[1], to = rows[2], by = 1)
+      cols <- seq(from = cols[1], to = cols[2], by = 1)
+      rows <- seq(from = rows[1], to = rows[2], by = 1)
+      
+    } else {
+      cols <- convertFromExcelRef(region)
+      rows <- as.integer(gsub("[A-Z]", "", region, perl = TRUE))
+    }
     startRow <- 1
     
   }
@@ -104,9 +110,12 @@ read.xlsx.Workbook <- function(xlsxFile,
 
   ## read in sharedStrings
   sharedStrings <- paste(unlist(xlsxFile$sharedStrings), collapse = "\n")
-  if(length(sharedStrings) > 0)
+  if(length(sharedStrings) > 0){
     sharedStrings <- getSharedStringsFromFile(sharedStringsFile = sharedStrings, isFile = FALSE)
-  
+    if(!is.null(na.strings)){
+      sharedStrings[sharedStrings %in% na.strings] <- NA
+    }
+  }
   
   ## read in worksheet and get cells with a value node, skip emptyStrs cells
   sheet_data <- xlsxFile$worksheets[[sheet]]$sheet_data
@@ -305,6 +314,7 @@ read.xlsx.Workbook <- function(xlsxFile,
              , colNames
              , skipEmptyRows
              , skipEmptyCols
+             , nRows
              , clean_names
              , PACKAGE = "openxlsx")
   

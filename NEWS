@@ -1,4 +1,49 @@
 
+openxlsx 4.0.14
+----------------------------------------------------------------
+
+NEW FEATURES
+
+* getNamedRegions returns sheet name and cell references along with the named regions.
+
+* borderStyle and borderColour can be vector to specify different values for each side
+
+* dataValidation type "list"
+
+* dataBar showValue, gradient and border can now be set through conditionalFormatting()
+
+* options("openxlsx.zipflags") to pass additional flags to zip application e.g. compression level
+
+* getTables() and removeTable() to show and remove Excel table objects 
+
+* set column to 'hidden' with setColWidths()
+
+
+BUG FIXES
+
+* skipEmptyRows & skipEmptyCols was being ignored by read.xlsx
+
+* date detection basic_string error
+
+* multiple spaces in table column names were not being maintained thus corrupting the xlsx file.
+
+* openXL fail silently on relative paths
+
+* headerStyle failed when writing a list of length 1 using write.xlsx
+
+* detectDate for read.xlsx issues
+
+* some Excel column types causing existing styling to be removed
+
+* na.strings no longer ignored for read.xlsx.Workbook
+
+* partial dollar matches on 'font' and 'fill' fixed
+
+* maintain hidden columns and their custom widths in loadWorkbook()
+
+* overwriting cells with borders sometimes removed the border styling
+
+
 openxlsx 4.0.0
 ----------------------------------------------------------------
 

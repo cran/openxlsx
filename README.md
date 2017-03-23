@@ -14,9 +14,13 @@ Java.
 
 ## Installation
 
-The openxlsx package requires a zip application to be available to R,
- such as the one that comes with Rtools, available [here](https://CRAN.R-project.org/bin/windows/Rtools/). (Windows only)
+The openxlsx package requires a zip application to be available to R. 
+
+For Linux and MacOS this should be available by default.
+
+For Windows, zip can be installed by installing [Rtools](https://CRAN.R-project.org/bin/windows/Rtools/)
  
+
  If the command
  ```R
  shell("zip")

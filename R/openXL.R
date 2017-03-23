@@ -10,7 +10,7 @@
 #' 
 #' In Linux it searches (via \code{which}) for available xls/xlsx
 #' reader applications (unless \code{options('openxlsx.excelApp')}
-#' is set to the app bin path), and if it founds anything, sets
+#' is set to the app bin path), and if it finds anything, sets
 #' \code{options('openxlsx.excelApp')} to the program choosed by
 #' the user via a menu (if many are present, otherwise it will
 #' set the only available). Currently searched for apps are
@@ -48,6 +48,7 @@ openXL <- function(file = NULL){
   
   ## execution should be in background in order to not block R
   ## interpreter
+  file <- normalizePath(file)
   userSystem <- Sys.info()["sysname"]
   
   

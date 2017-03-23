@@ -486,23 +486,22 @@ convertFromExcelRef <- function(col){
 #'   \item{For numeric rouding use "0.00" with the preferred number of decimal places}
 #' }
 #' 
-#' @param border Cell border 
-#' (Any combination of "Top", "Bottom", "Left", "Right" in any order).
+#' @param border Cell border. A vector of "top", "bottom", "left", "right" or a single string).
 #' \itemize{
-#'    \item{\bold{Top}}{ Top border}
-#'    \item{\bold{Bottom}}{ Bottom border}
-#'    \item{\bold{Left}}{ Left border}
-#'    \item{\bold{Right}}{ Right border}
-#'    \item{\bold{TopBottom}}{ Top and bottom border}
-#'    \item{\bold{LeftRight}}{ Left and right border}
-#'    \item{\bold{TopLeftRight}}{ Top and Left border}
-#'    \item{\bold{TopBottomLeftRight}}{ All borders}
+#'    \item{\bold{"top"}}{ Top border}
+#'    \item{\bold{bottom}}{ Bottom border}
+#'    \item{\bold{left}}{ Left border}
+#'    \item{\bold{right}}{ Right border}
+#'    \item{\bold{TopBottom} or \bold{c("top", "bottom")}}{ Top and bottom border}
+#'    \item{\bold{LeftRight} or \bold{c("left", "right")}}{ Left and right border}
+#'    \item{\bold{TopLeftRight} or \bold{c("top", "left", "right")}}{ Top, Left and right border}
+#'    \item{\bold{TopBottomLeftRight} or \bold{c("top", "bottom", "left", "right")}}{ All borders}
 #'   }
 #'   
-#' @param borderColour  Colour of cell border.  
+#' @param borderColour Colour of cell border vector the same length as the number of sides specified in "border" 
 #' A valid colour (belonging to colours()) or a valid hex colour beginning with "#"  
 #' 
-#' @param borderStyle Border line style
+#' @param borderStyle Border line style vector the same length as the number of sides specified in "border"
 #' \itemize{
 #'    \item{\bold{none}}{ No Border}
 #'    \item{\bold{thin}}{ thin border}
@@ -522,7 +521,7 @@ convertFromExcelRef <- function(col){
 #'    
 #' @param bgFill Cell background fill colour.
 #' A valid colour (belonging to colours()) or a valid hex colour beginning with "#". 
-#' --  Use for conditional formatting styles only.
+#' --  \bold{Use for conditional formatting styles only.}
 #' @param fgFill Cell foreground fill colour.
 #' A valid colour (belonging to colours()) or a valid hex colour beginning with "#"   
 #'   
@@ -603,12 +602,12 @@ createStyle <- function(fontName = NULL,
   if(numFmt == "date"){
     numFmt <- getOption("openxlsx.dateFormat", getOption("openxlsx.dateformat", "date"))
   }else if(numFmt == "longdate"){
-      numFmt <- getOption("openxlsx.datetimeFormat", getOption("openxlsx.datetimeformat", getOption("openxlsx.dateTimeFormat", "longdate")))  
+    numFmt <- getOption("openxlsx.datetimeFormat", getOption("openxlsx.datetimeformat", getOption("openxlsx.dateTimeFormat", "longdate")))  
   }else if(!numFmt %in% validNumFmt){
     numFmt <- replaceIllegalCharacters(numFmt_original)
   }
   
-
+  
   
   
   numFmtMapping <- list(list("numFmtId" = 0),  # GENERAL
@@ -700,7 +699,9 @@ createStyle <- function(fontName = NULL,
   
   ## border
   if(!is.null(border)){
+    
     border <- toupper(border)
+    border <- paste(border, collapse = "")
     
     ## find position of each side in string
     sides <- c("LEFT", "RIGHT", "TOP", "BOTTOM")
@@ -788,8 +789,8 @@ createStyle <- function(fontName = NULL,
 #' @param rows Rows to apply style to.
 #' @param cols columns to apply style to.
 #' @param gridExpand If \code{TRUE}, style will be applied to all combinations of rows and cols.
-#' @param stack If \code{TRUE}, style is merged with existing cell styles, 
-#' else any existing style is complete replaced by the new style.
+#' @param stack If \code{TRUE} the new style is merged with any existing cell styles.  If FALSE, any 
+#' existing style is replaced by the new style.
 #' @seealso \code{\link{createStyle}}
 #' @seealso expand.grid
 #' @export
@@ -829,7 +830,7 @@ addStyle <- function(wb, sheet, style, rows, cols, gridExpand = FALSE, stack = F
   
   if(!is.logical(stack))
     stop("stack parameter must be a logical!")
-
+  
   if(length(cols) == 0 | length(rows) == 0)
     return(invisible(0))
   
@@ -838,7 +839,7 @@ addStyle <- function(wb, sheet, style, rows, cols, gridExpand = FALSE, stack = F
   
   ## rows and cols need to be the same length
   if(gridExpand){
-
+    
     n <- length(cols)
     cols <- rep.int(cols, times = length(rows))
     rows <- rep(rows, each = n)
@@ -866,7 +867,7 @@ addStyle <- function(wb, sheet, style, rows, cols, gridExpand = FALSE, stack = F
 #' @param cellCoords A data.frame with two columns coordinate pairs. 
 #' @return Excel alphanumeric cell reference
 getCellRefs <- function(cellCoords){
-  l <- .Call("openxlsx_convert_to_excel_ref", unlist(cellCoords[,2]), LETTERS, PACKAGE="openxlsx")
+  l <- convert_to_excel_ref(cols = unlist(cellCoords[,2]), LETTERS = LETTERS)
   paste0(l, cellCoords[,1])
 }
 
@@ -922,7 +923,7 @@ freezePane <- function(wb, sheet, firstActiveRow = NULL, firstActiveCol = NULL, 
     stop("firstCol must be TRUE/FALSE")
   
   
-
+  
   
   if(firstRow & !firstCol){
     invisible(wb$freezePanes(sheet, firstRow = firstRow))
@@ -1097,8 +1098,9 @@ setRowHeights <- function(wb, sheet, rows, heights){
 #' @param wb A workbook object
 #' @param sheet A name or index of a worksheet
 #' @param cols Indices of cols to set width
-#' @param widths widths to set rows to specified in Excel column width units or "auto" for automatic sizing. The widths argument is
+#' @param widths widths to set cols to specified in Excel column width units or "auto" for automatic sizing. The widths argument is
 #' recycled to the length of cols.
+#' @param hidden Logical vector. If TRUE the column is hidden.
 #' @param ignoreMergedCells Ignore any cells that have been merged with other cells in the calculation of "auto" column widths.
 #' @details The global min and max column width for "auto" columns is set by (default values show):
 #' \itemize{
@@ -1128,7 +1130,7 @@ setRowHeights <- function(wb, sheet, rows, heights){
 #'   
 #' ## Save workbook
 #' saveWorkbook(wb, "setColWidthsExample.xlsx", overwrite = TRUE)
-setColWidths <- function(wb, sheet, cols, widths, ignoreMergedCells = FALSE){
+setColWidths <- function(wb, sheet, cols, widths = 8.43, hidden = rep(FALSE, length(cols)), ignoreMergedCells = FALSE){
   
   sheet <- wb$validateSheet(sheet)
   
@@ -1142,29 +1144,61 @@ setColWidths <- function(wb, sheet, cols, widths, ignoreMergedCells = FALSE){
   if(length(widths) > length(cols))
     stop("More widths than columns supplied.")
   
+  if(length(hidden) > length(cols))
+    stop("hidden argument is longer than cols.")
+  
   if(length(widths) < length(cols))
     widths <- rep(widths, length.out = length(cols))
   
-  ## check for existing custom widths
-  flag <- names(wb$colWidths[[sheet]]) %in% cols
-  if(any(flag))
-    wb$colWidths[[sheet]] <- wb$colWidths[[sheet]][!flag]
-  
-  cols <- convertFromExcelRef(cols)
+  if(length(hidden) < length(cols))
+    hidden <- rep(hidden, length.out = length(cols))
   
   ## Remove duplicates
   widths <- widths[!duplicated(cols)]
+  hidden <- hidden[!duplicated(cols)]
   cols <- cols[!duplicated(cols)]
+  cols <- convertFromExcelRef(cols)
   
-  names(widths) <- cols
-  exNames <- names(wb$colWidths[[sheet]])
+  if(length(wb$colWidths[[sheet]]) > 0){
+    
+    existing_cols <- names(wb$colWidths[[sheet]])
+    existing_widths <- unname(wb$colWidths[[sheet]])
+    existing_hidden <- attr(wb$colWidths[[sheet]], "hidden")
+    
+    ## check for existing custom widths
+    flag <- existing_cols %in% cols
+    if(any(flag)){
+      existing_cols <- existing_cols[!flag]
+      existing_widths <- existing_widths[!flag]
+      existing_hidden <- existing_hidden[!flag]
+    }
+
+    all_names <- c(existing_cols, cols)
+    all_widths <- c(existing_widths, widths)
+    all_hidden <- c(existing_hidden, as.character(as.integer(hidden)))
+    
+    ord <- order(as.integer(all_names))
+    all_names <- all_names[ord]
+    all_widths <- all_widths[ord]
+    all_hidden <- all_hidden[ord]
+    
+    
+    names(all_widths) <- all_names
+    wb$colWidths[[sheet]] <- all_widths
+    attr(wb$colWidths[[sheet]], "hidden") <- all_hidden
+    
+    
+    
+  }else{
+    
+    names(widths) <- cols
+    wb$colWidths[[sheet]] <- widths
+    attr(wb$colWidths[[sheet]], "hidden") <- as.character(as.integer(hidden))
+    
+  }
   
-  allWidths <- unlist(c(wb$colWidths[[sheet]], widths))
-  names(allWidths) <- c(exNames, cols)
   
-  allWidths <- allWidths[order(as.integer(names(allWidths)))]
-  
-  wb$colWidths[[sheet]] <- allWidths
+  invisible(0)
 }
 
 
@@ -1324,7 +1358,7 @@ insertPlot <- function(wb, sheet, width = 6, height = 4, xy = NULL,
   }else if(fileType == "png"){
     dev.copy(png, filename = fileName, width = width, height = height, units = units, res = dpi)
   }else if(fileType == "tiff"){
-    dev.copy(tiff, filename = fileName, width = width, height = height, units = units, compression = "none")
+    dev.copy(tiff, filename = fileName, width = width, height = height, units = units, compression = "none", res = dpi)
   }
   
   ## write image
@@ -1465,9 +1499,9 @@ deleteData <- function(wb, sheet, cols, rows, gridExpand = FALSE){
   if(!"Workbook" %in% class(wb))
     stop("First argument must be a Workbook.")
   
-
+  
   wb$worksheets[[sheet]]$sheet_data$delete(rows_in = rows, cols_in = cols, grid_expand = gridExpand)
-
+  
   
   invisible(0)
 }
@@ -1808,7 +1842,7 @@ pageSetup <- function(wb, sheet, orientation = NULL, scale = 100,
     paperSize <- regmatches(xml, regexpr('(?<=paperSize=")[0-9]+', xml, perl = TRUE)) ## get existing
   }
   
- ## validate sheet - get sheet index
+  ## validate sheet - get sheet index
   sheet <- wb$validateSheet(sheet)
   
   
@@ -1817,7 +1851,7 @@ pageSetup <- function(wb, sheet, orientation = NULL, scale = 100,
   hdpi <- regmatches(xml, regexpr('(?<=horizontalDpi=")[0-9]+', xml, perl = TRUE))
   vdpi <- regmatches(xml, regexpr('(?<=verticalDpi=")[0-9]+', xml, perl = TRUE))
   
-
+  
   
   ##############################
   ## Update
@@ -1842,9 +1876,9 @@ pageSetup <- function(wb, sheet, orientation = NULL, scale = 100,
                          sheet = names(wb)[[sheet]],
                          localSheetId = sheet - 1L)
     
-  
+    
   }else if(!is.null(printTitleCols) & is.null(printTitleRows)){
-
+    
     if(!is.numeric(printTitleCols))
       stop("printTitleCols must be numeric.")
     
@@ -1855,9 +1889,9 @@ pageSetup <- function(wb, sheet, orientation = NULL, scale = 100,
                          sheet = names(wb)[[sheet]],
                          localSheetId = sheet - 1L)
     
-
+    
   }else if(!is.null(printTitleCols) & !is.null(printTitleRows)){
-  
+    
     if(!is.numeric(printTitleRows))
       stop("printTitleRows must be numeric.")
     
@@ -1874,7 +1908,7 @@ pageSetup <- function(wb, sheet, orientation = NULL, scale = 100,
     sheet <- names(wb)[[sheet]]
     
     wb$workbook$definedNames <- c(wb$workbook$definedNames, 
-       sprintf('<definedName name="_xlnm.Print_Titles" localSheetId="%s">\'%s\'!%s,\'%s\'!%s</definedName>', localSheetId, sheet, cols, sheet, rows)
+                                  sprintf('<definedName name="_xlnm.Print_Titles" localSheetId="%s">\'%s\'!%s,\'%s\'!%s</definedName>', localSheetId, sheet, cols, sheet, rows)
     )
     
   }
@@ -2193,8 +2227,8 @@ createNamedRegion <- function(wb, sheet, cols, rows, name){
   startRow <- min(rows)
   endRow <- max(rows)
   
-  ref1 <- paste0("$", .Call("openxlsx_convert_to_excel_ref", startCol, LETTERS), "$", startRow)
-  ref2 <- paste0("$", .Call("openxlsx_convert_to_excel_ref", endCol, LETTERS), "$", endRow)
+  ref1 <- paste0("$", .Call("openxlsx_convert_to_excel_ref", startCol, LETTERS, PACKAGE = "openxlsx"), "$", startRow)
+  ref2 <- paste0("$", .Call("openxlsx_convert_to_excel_ref", endCol, LETTERS, PACKAGE = "openxlsx"), "$", endRow)
   
   invisible(
     wb$createNamedRegion(ref1 = ref1, ref2 = ref2, name = name, sheet = wb$sheet_names[sheet])
@@ -2225,7 +2259,7 @@ createNamedRegion <- function(wb, sheet, cols, rows, name){
 #'                   cols = 1:ncol(iris))
 #' 
 #' 
-#' ## using writeData 'name' argument
+#' ## using writeData 'name' argument to create a named region
 #' writeData(wb, sheet = 1, x = iris, name = "iris2", startCol = 10)
 #' 
 #' out_file <- tempfile(fileext = ".xlsx")
@@ -2263,7 +2297,7 @@ getNamedRegions.default <- function(x){
   if(length(dn) == 0)
     return(NULL)
   
-  dn_names <- regmatches(dn, regexpr('(?<=name=")[^"]+', dn, perl = TRUE))
+  dn_names <- get_named_regions_from_string(dn = dn)
   
   unlink(xmlDir, recursive = TRUE, force = TRUE)
   
@@ -2278,9 +2312,10 @@ getNamedRegions.Workbook <- function(x){
   if(length(dn) == 0)
     return(NULL)
   
-  dn_names <- regmatches(dn, regexpr('(?<=name=")[^"]+', dn, perl = TRUE))
+  dn_names <- get_named_regions_from_string(dn = dn)
   
   return(dn_names)
+  
 }
 
 
@@ -2495,10 +2530,10 @@ setFooter <- function(wb, text, position = "center"){
 #' @param sheet A name or index of a worksheet
 #' @param cols Columns to apply conditional formatting to
 #' @param rows Rows to apply conditional formatting to
-#' @param type One of 'whole', 'decimal', 'date', 'time', 'textLength'
+#' @param type One of 'whole', 'decimal', 'date', 'time', 'textLength', 'list' (see examples)
 #' @param operator One of 'between', 'notBetween', 'equal',
 #'  'notEqual', 'greaterThan', 'lessThan', 'greaterThanOrEqual', 'lessThanOrEqual'
-#' @param value a vector of length 1 or 2 depending on operator
+#' @param value a vector of length 1 or 2 depending on operator (see examples)
 #' @param allowBlank logial
 #' @param showInputMsg logical
 #' @param showErrorMsg logical
@@ -2530,6 +2565,22 @@ setFooter <- function(wb, text, position = "center"){
 #' 
 #' saveWorkbook(wb, "dataValidationExample.xlsx", overwrite = TRUE)
 #' 
+#' 
+#' ######################################################################
+#' ## If type == 'list'
+#' # operator argument is ignored.
+#' 
+#' wb <- createWorkbook()
+#' addWorksheet(wb, "Sheet 1")
+#' addWorksheet(wb, "Sheet 2")
+#' 
+#' writeDataTable(wb, sheet = 1, x = iris[1:30,])
+#' writeData(wb, sheet = 2, x = sample(iris$Sepal.Length, 10))
+#' 
+#' dataValidation(wb, 1, col = 1, rows = 2:31, type = "list", value = "'Sheet 2'!$A$1:$A$10")
+#' 
+#' # openXL(wb)
+#' 
 dataValidation <- function(wb, sheet, cols, rows, type, operator, value, allowBlank = TRUE, showInputMsg = TRUE, showErrorMsg = TRUE){
   
   ## rows and cols
@@ -2545,7 +2596,8 @@ dataValidation <- function(wb, sheet, cols, rows, type, operator, value, allowBl
                    "decimal",
                    "date",
                    "time", ## need to conv
-                   "textLength"
+                   "textLength",
+                   "list"
   )
   
   if(!tolower(type) %in% tolower(valid_types))
@@ -2562,8 +2614,16 @@ dataValidation <- function(wb, sheet, cols, rows, type, operator, value, allowBl
                        "greaterThanOrEqual",
                        "lessThanOrEqual")
   
-  if(!tolower(operator) %in% tolower(valid_operators))
-    stop("Invalid 'operator' argument!")
+  if(tolower(type) != "list"){
+    
+    if(!tolower(operator) %in% tolower(valid_operators))
+      stop("Invalid 'operator' argument!")
+    
+    operator <- valid_operators[tolower(valid_operators) %in% tolower(operator)][1]
+    
+  }else{
+    operator <- "between" ## ignored
+  }
   
   if(!is.logical(allowBlank))
     stop("Argument 'allowBlank' musts be logical!")
@@ -2575,7 +2635,7 @@ dataValidation <- function(wb, sheet, cols, rows, type, operator, value, allowBl
     stop("Argument 'showErrorMsg' musts be logical!")
   
   ## All inputs validated
-  operator <- valid_operators[tolower(valid_operators) %in% tolower(operator)][1]
+  
   type <- valid_types[tolower(valid_types) %in% tolower(type)][1]
   
   ## check input combinations
@@ -2591,329 +2651,41 @@ dataValidation <- function(wb, sheet, cols, rows, type, operator, value, allowBl
   showInputMsg <- as.integer(showInputMsg[1])
   showErrorMsg <- as.integer(showErrorMsg[1])
   
-  
-  invisible(wb$dataValidation(sheet = sheet, 
-                              startRow = min(rows),
-                              endRow = max(rows),
-                              startCol = min(cols),
-                              endCol = max(cols),
-                              type = type, 
-                              operator = operator, 
-                              value = value, 
-                              allowBlank = allowBlank, 
-                              showInputMsg = showInputMsg,
-                              showErrorMsg = showErrorMsg))
-  
-  invisible(0)
-  
-}
-
-
-
-
-
-
-#' @name conditionalFormatting
-#' @title Add conditional formatting to cells
-#' @description Add conditional formatting to cells
-#' @author Alexander Walker
-#' @param wb A workbook object
-#' @param sheet A name or index of a worksheet
-#' @param cols Columns to apply conditional formatting to
-#' @param rows Rows to apply conditional formatting to
-#' @param rule The condition under which to apply the formatting. See examples.
-#' @param style A style to apply to those cells that satisify the rule. Default is createStyle(fontColour = "#9C0006", bgFill = "#FFC7CE")
-#' @param type Either 'expression', 'colorscale', 'databar', 'duplicates' or "contains' (case insensitive).
-#' @details See Examples.
-#' 
-#' If type == "expression"
-#' \itemize{
-#'   \item{style is a Style object. See \code{\link{createStyle}}}
-#'   \item{rule is an expression. Valid operators are "<", "<=", ">", ">=", "==", "!=".}
-#' }
-#' 
-#' If type == "colourScale"
-#' \itemize{
-#'   \item{style is a vector of colours with length 2 or 3}
-#'   \item{rule can be NULL or a vector of colours of equal length to styles}
-#' }
-#' 
-#' If type == "databar"
-#' \itemize{
-#'   \item{style is a vector of colours with length 2 or 3}
-#'   \item{rule is a numeric vector sepcifiying the range of the databar colours. Must be equal length to style}
-#' }
-#' 
-#' If type == "duplicates"
-#' \itemize{
-#'   \item{style is a Style object. See \code{\link{createStyle}}}
-#'   \item{rule is ignored.}
-#' }
-#' 
-#' If type == "contains"
-#' \itemize{
-#'   \item{style is a Style object. See \code{\link{createStyle}}}
-#'   \item{rule is the text to look for within cells}
-#' }
-#' 
-#' If type == "between"
-#' \itemize{
-#'   \item{style is a Style object. See \code{\link{createStyle}}}
-#'   \item{rule is a numeric vector of length 2 specifying lower and upper bound (Inclusive)}
-#' }
-#' 
-#' @seealso \code{\link{createStyle}}
-#' @export
-#' @examples
-#' wb <- createWorkbook()
-#' addWorksheet(wb, "cellIs")
-#' addWorksheet(wb, "Moving Row")
-#' addWorksheet(wb, "Moving Col")
-#' addWorksheet(wb, "Dependent on 1")
-#' addWorksheet(wb, "Duplicates")
-#' addWorksheet(wb, "containsText")
-#' addWorksheet(wb, "colourScale", zoom = 30)
-#' addWorksheet(wb, "databar")
-#' addWorksheet(wb, "between")
-#' addWorksheet(wb, "logical operators")
-#' 
-#' negStyle <- createStyle(fontColour = "#9C0006", bgFill = "#FFC7CE")
-#' posStyle <- createStyle(fontColour = "#006100", bgFill = "#C6EFCE")
-#' 
-#' ## rule applies to all each cell in range
-#' writeData(wb, "cellIs", -5:5)
-#' writeData(wb, "cellIs", LETTERS[1:11], startCol=2)
-#' conditionalFormatting(wb, "cellIs", cols=1, rows=1:11, rule="!=0", style = negStyle)
-#' conditionalFormatting(wb, "cellIs", cols=1, rows=1:11, rule="==0", style = posStyle)
-#' 
-#' ## highlight row dependent on first cell in row
-#' writeData(wb, "Moving Row", -5:5)
-#' writeData(wb, "Moving Row", LETTERS[1:11], startCol=2)
-#' conditionalFormatting(wb, "Moving Row", cols=1:2, rows=1:11, rule="$A1<0", style = negStyle)
-#' conditionalFormatting(wb, "Moving Row", cols=1:2, rows=1:11, rule="$A1>0", style = posStyle)
-#' 
-#' ## highlight column dependent on first cell in column
-#' writeData(wb, "Moving Col", -5:5)
-#' writeData(wb, "Moving Col", LETTERS[1:11], startCol=2)
-#' conditionalFormatting(wb, "Moving Col", cols=1:2, rows=1:11, rule="A$1<0", style = negStyle)
-#' conditionalFormatting(wb, "Moving Col", cols=1:2, rows=1:11, rule="A$1>0", style = posStyle)
-#' 
-#' ## highlight entire range cols X rows dependent only on cell A1
-#' writeData(wb, "Dependent on 1", -5:5)
-#' writeData(wb, "Dependent on 1", LETTERS[1:11], startCol=2)
-#' conditionalFormatting(wb, "Dependent on 1", cols=1:2, rows=1:11, rule="$A$1<0", style = negStyle)
-#' conditionalFormatting(wb, "Dependent on 1", cols=1:2, rows=1:11, rule="$A$1>0", style = posStyle)
-#' 
-#' ## highlight duplicates using default style
-#' writeData(wb, "Duplicates", sample(LETTERS[1:15], size = 10, replace = TRUE))
-#' conditionalFormatting(wb, "Duplicates", cols = 1, rows = 1:10, type = "duplicates")
-#' 
-#' ## cells containing text
-#' fn <- function(x) paste(sample(LETTERS, 10), collapse = "-")
-#' writeData(wb, "containsText", sapply(1:10, fn))
-#' conditionalFormatting(wb, "containsText", cols = 1, rows = 1:10, type = "contains", rule = "A")
-#' 
-#' ## colourscale colours cells based on cell value
-#' df <- read.xlsx(system.file("readTest.xlsx", package = "openxlsx"), sheet = 4)
-#' writeData(wb, "colourScale", df, colNames=FALSE)  ## write data.frame
-#' 
-#' ## rule is a vector or colours of length 2 or 3 (any hex colour or any of colours())
-#' ## If rule is NULL, min and max of cells is used. Rule must be the same length as style or NULL.
-#' conditionalFormatting(wb, "colourScale", cols=1:ncol(df), rows=1:nrow(df),
-#'    style = c("black", "white"), 
-#'    rule = c(0, 255), 
-#'    type = "colourScale")
-#' 
-#' setColWidths(wb, "colourScale", cols = 1:ncol(df), widths = 1.07)
-#' setRowHeights(wb, "colourScale", rows = 1:nrow(df), heights = 7.5) 
-#' 
-#' ## Databars
-#' writeData(wb, "databar", -5:5)
-#' conditionalFormatting(wb, "databar", cols = 1, rows = 1:11, type = "databar") ## Default colours
-#' 
-#' ## Betweem
-#' # Highlight cells in interval [-2, 2]
-#' writeData(wb, "between", -5:5)
-#' conditionalFormatting(wb, "between", cols = 1, rows = 1:11, type = "between", rule = c(-2,2))
-#' 
-#' ## Logical Operators
-#' # You can use Excels logical Opertors
-#' writeData(wb, "logical operators", 1:10)
-#' conditionalFormatting(wb, "logical operators", cols = 1, rows = 1:10,
-#'  rule = "OR($A1=1,$A1=3,$A1=5,$A1=7)")
-#' 
-#' saveWorkbook(wb, "conditionalFormattingExample.xlsx", TRUE)
-conditionalFormatting <- function(wb, sheet, cols, rows, rule = NULL, style = NULL, type = "expression"){
-  
-  type <- tolower(type)
-  
-  if(type %in% c("colorscale", "colourscale")){
-    type <- "colorScale"
+  if(type == "list"){
     
-  }else if(type == "databar"){
-    type <- "dataBar"
-    
-  }else if(type == "duplicates"){
-    type <- "duplicatedValues"
-    
-  }else if(type == "contains"){
-    type <- "containsText"
-    
-  }else if(type == "between"){
-    type <- "between"
-    
-  }else if(type != "expression"){
-    stop("Invalid type argument.  Type must be one of 'expression', 'colourScale', 'databar', 'duplicates' or 'contains'")
-  }
-  
-  ## rows and cols
-  if(!is.numeric(cols))
-    cols <- convertFromExcelRef(cols)  
-  rows <- as.integer(rows)
-  
-  
-  ## check valid rule
-  values <- NULL
-  dxfId <- NULL
-  
-  if(type == "colorScale"){
-    
-    # type == "colourScale"
-    # - style is a vector of colours with length 2 or 3
-    # - rule specifies the quantiles (numeric vector of length 2 or 3), if NULL min and max are used
-    
-    if(is.null(style))
-      stop("If type == 'colourScale', style must be a vector of colours of length 2 or 3.")
-    
-    if(class(style) != "character")
-      stop("If type == 'colourScale', style must be a vector of colours of length 2 or 3.")
-    
-    if(!length(style) %in% 2:3)
-      stop("If type == 'colourScale', style must be a vector of length 2 or 3.")
-    
-    if(!is.null(rule)){
-      if(length(rule) != length(style))
-        stop("If type == 'colourScale', rule and style must have equal lengths.")
-    }
-    
-    style <- validateColour(style, errorMsg="Invalid colour specified in style.")
-    
-    values <- rule
-    rule <- style
-    
-  }else if(type == "dataBar"){
-    
-    # type == "databar"
-    # - style is a vector of colours of length 2 or 3
-    # - rule specifies the quantiles (numeric vector of length 2 or 3), if NULL min and max are used
-    
-    if(is.null(style))
-      style <- "#638EC6"
-    
-    if(class(style) != "character")
-      stop("If type == 'dataBar', style must be a vector of colours of length 1 or 2.")
-    
-    if(!length(style) %in% 1:2)
-      stop("If type == 'dataBar', style must be a vector of length 1 or 2.")
-    
-    if(!is.null(rule)){
-      if(length(rule) != length(style))
-        stop("If type == 'dataBar', rule and style must have equal lengths.")
-    }
-    
-    style <- validateColour(style, errorMsg="Invalid colour specified in style.")
-    
-    values <- rule
-    rule <- style
-    
-  }else if(type == "expression"){
-    
-    # type == "expression"
-    # - style = createStyle()
-    # - rule is an expression to evaluate
-    
-    # rule <- gsub(" ", "", rule)
-    rule <- replaceIllegalCharacters(rule)
-    rule <- gsub("!=", "&lt;&gt;", rule)
-    rule <- gsub("==", "=", rule)
-    
-    if(!grepl("[A-Z]", substr(rule, 1, 2))){
-      
-      ## formula looks like "operatorX" , attach top left cell to rule    
-      rule <- paste0( getCellRefs(data.frame("x" = min(rows), "y" = min(cols))), rule)
-      
-    } ## else, there is a letter in the formula and apply as is
-    
-    if(is.null(style))
-      style <- createStyle(fontColour = "#9C0006", bgFill = "#FFC7CE")
-    
-    if(!"Style" %in% class(style))
-      stop("If type == 'expression', style must be a Style object.")
-    
-    invisible(dxfId <- wb$addDXFS(style))
-    
-  }else if(type == "duplicatedValues"){
-    
-    # type == "duplicatedValues"
-    # - style is a Style object
-    # - rule is ignored
-    
-    if(is.null(style))
-      style <- createStyle(fontColour = "#9C0006", bgFill = "#FFC7CE")
-    
-    if(!"Style" %in% class(style))
-      stop("If type == 'duplicates', style must be a Style object.")
-    
-    invisible(dxfId <- wb$addDXFS(style))
-    rule <- style
-    
-  }else if(type == "containsText"){
-    
-    # type == "contains"
-    # - style is Style object
-    # - rule is text to look for
-    
-    if(is.null(style))
-      style <- createStyle(fontColour = "#9C0006", bgFill = "#FFC7CE")
-    
-    if(!"character" %in% class(rule))
-      stop("If type == 'contains', rule must be a character vector of length 1.")
-    
-    if(!"Style" %in% class(style))
-      stop("If type == 'contains', style must be a Style object.")
-    
-    invisible(dxfId <- wb$addDXFS(style))
-    values <- rule
-    rule <- style
-    
-  }else if(type == "between"){
-    
-    rule <- range(rule)
-    
-    if(is.null(style))
-      style <- createStyle(fontColour = "#9C0006", bgFill = "#FFC7CE")
-    
-    if(!"Style" %in% class(style))
-      stop("If type == 'between', style must be a Style object.")
-    
-    invisible(dxfId <- wb$addDXFS(style))
-  }
-  
-  
-  
-  invisible(wb$conditionalFormatting(sheet,
+    invisible(wb$dataValidation_list(sheet = sheet, 
                                      startRow = min(rows),
                                      endRow = max(rows),
                                      startCol = min(cols),
                                      endCol = max(cols),
-                                     dxfId = dxfId,
-                                     formula = rule,
-                                     type = type,
-                                     values = values))
+                                     value = value, 
+                                     allowBlank = allowBlank, 
+                                     showInputMsg = showInputMsg,
+                                     showErrorMsg = showErrorMsg))
+    
+  }else{
+    
+    invisible(wb$dataValidation(sheet = sheet, 
+                                startRow = min(rows),
+                                endRow = max(rows),
+                                startCol = min(cols),
+                                endCol = max(cols),
+                                type = type, 
+                                operator = operator, 
+                                value = value, 
+                                allowBlank = allowBlank, 
+                                showInputMsg = showInputMsg,
+                                showErrorMsg = showErrorMsg))
+    
+  }
+  
+  
   
   invisible(0)
   
 }
+
+
 
 
 
@@ -3060,7 +2832,7 @@ sheetVisibility <- function(wb){
   value[value %in% "false"] <- "hidden"
   value[value %in% "veryhidden"] <- "veryHidden"
   
-
+  
   exState0 <- regmatches(wb$workbook$sheets, regexpr('(?<=state=")[^"]+', wb$workbook$sheets, perl = TRUE))
   exState <- tolower(exState0)
   exState[exState %in% "true"] <- "visible"
@@ -3295,48 +3067,49 @@ all.equal.Workbook <- function(target, current, ...){
   
   
   nSheets <- length(names(x))
+  failures <- NULL
   
   flag <- all(names(x$charts) %in% names(y$charts)) & all(names(y$charts) %in% names(x$charts))
   if(!flag){
     message("charts not equal")
-    return(FALSE)
+    failures <- c(failures, "wb$charts")
   } 
   
   flag <- all(sapply(1:nSheets, function(i) isTRUE(all.equal(x$colWidths[[i]], y$colWidths[[i]]))))
   if(!flag){
     message("colWidths not equal")
-    return(FALSE)
-  } 
+    failures <- c(failures, "wb$colWidths")
+  }
   
   flag <- all(x$Content_Types %in% y$Content_Types) & all(y$Content_Types %in% x$Content_Types)
   if(!flag){
     message("Content_Types not equal")
-    return(FALSE)
+    failures <- c(failures, "wb$Content_Types")
   } 
   
   flag <- all(unlist(x$core) == unlist(y$core))
   if(!flag){
     message("core not equal")
-    return(FALSE)
+    failures <- c(failures, "wb$core")
   } 
   
   
   flag <- all(unlist(x$drawings) %in% unlist(y$drawings)) & all(unlist(y$drawings) %in% unlist(x$drawings))
   if(!flag){
     message("drawings not equal")
-    return(FALSE)
+    failures <- c(failures, "wb$drawings")
   } 
   
   flag <- all(unlist(x$drawings_rels) %in% unlist(y$drawings_rels)) & all(unlist(y$drawings_rels) %in% unlist(x$drawings_rels))
   if(!flag){
     message("drawings_rels not equal")
-    return(FALSE)
+    failures <- c(failures, "wb$drawings_rels")
   } 
   
   flag <- all(sapply(1:nSheets, function(i) isTRUE(all.equal(x$drawings_rels[[i]], y$drawings_rels[[i]]))))
   if(!flag){
     message("drawings_rels not equal")
-    return(FALSE)
+    failures <- c(failures, "wb$drawings_rels")
   } 
   
   
@@ -3345,28 +3118,28 @@ all.equal.Workbook <- function(target, current, ...){
   flag <- all(names(x$media) %in% names(y$media) & names(y$media) %in% names(x$media))
   if(!flag){
     message("media not equal")
-    return(FALSE)
+    failures <- c(failures, "wb$media")
   } 
   
   flag <- all(sapply(1:nSheets, function(i) isTRUE(all.equal(x$rowHeights[[i]], y$rowHeights[[i]]))))
   if(!flag){
     message("rowHeights not equal")
-    return(FALSE)
+    failures <- c(failures, "wb$rowHeights")
   } 
   
   flag <- all(sapply(1:nSheets, function(i) isTRUE(all.equal(names(x$rowHeights[[i]]), names(y$rowHeights[[i]])))))
   if(!flag){
-    message("Content_Types not equal")
-    return(FALSE)
+    message("rowHeights not equal")
+    failures <- c(failures, "wb$rowHeights")
   } 
   
   flag <- all(x$sharedStrings %in% y$sharedStrings) & all(y$sharedStrings %in% x$sharedStrings) & (length(x$sharedStrings) == length(y$sharedStrings)) 
   if(!flag){
     message("sharedStrings not equal")
-    return(FALSE)
+    failures <- c(failures, "wb$sharedStrings")
   } 
   
-
+  
   
   # flag <- sapply(1:nSheets, function(i) isTRUE(all.equal(x$worksheets[[i]]$sheet_data, y$worksheets[[i]]$sheet_data)))
   # if(!all(flag)){
@@ -3416,20 +3189,20 @@ all.equal.Workbook <- function(target, current, ...){
   flag <- all(names(x$styles) %in% names(y$styles)) & all(names(y$styles) %in% names(x$styles))
   if(!flag){
     message("names styles not equal")
-    return(FALSE)
+    failures <- c(failures, "names of styles not equal")
   } 
   
   flag <- all(unlist(x$styles) %in% unlist(y$styles)) & all(unlist(y$styles) %in% unlist(x$styles))
   if(!flag){
     message("styles not equal")
-    return(FALSE)
+    failures <- c(failures, "styles not equal") 
   } 
   
   
   flag <- length(x$styleObjects) == length(y$styleObjects)
   if(!flag){
     message("styleObjects lengths not equal")
-    return(FALSE)
+    failures <- c(failures, "styleObjects lengths not equal") 
   } 
   
   
@@ -3444,143 +3217,143 @@ all.equal.Workbook <- function(target, current, ...){
       flag <- isTRUE(all.equal(sx$sheet, sy$sheet))
       if(!flag){
         message(sprintf("styleObjects '%s' sheet name not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' sheet name not equal", i)) 
       } 
       
       
       flag <- isTRUE(all.equal(sx$rows, sy$rows))
       if(!flag){
         message(sprintf("styleObjects '%s' rows not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' rows not equal", i)) 
       } 
       
       flag <- isTRUE(all.equal(sx$cols, sy$cols))
       if(!flag){
         message(sprintf("styleObjects '%s' cols not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' cols not equal", i)) 
       } 
       
       ## check style class equality
       flag <-isTRUE(all.equal(sx$style$fontName, sy$style$fontName))
       if(!flag){
         message(sprintf("styleObjects '%s' fontName not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' fontName not equal", i)) 
       } 
       
       flag <-isTRUE(all.equal(sx$style$fontColour, sy$style$fontColour))
       if(!flag){
         message(sprintf("styleObjects '%s' fontColour not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' fontColour not equal", i)) 
       }
       
       flag <-isTRUE(all.equal(sx$style$fontSize, sy$style$fontSize))
       if(!flag){
         message(sprintf("styleObjects '%s' fontSize not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' fontSize not equal", i)) 
       } 
       
       flag <-isTRUE(all.equal(sx$style$fontFamily, sy$style$fontFamily))
       if(!flag){
         message(sprintf("styleObjects '%s' fontFamily not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' fontFamily not equal", i)) 
       } 
       
       flag <-isTRUE(all.equal(sx$style$fontDecoration, sy$style$fontDecoration))
       if(!flag){
         message(sprintf("styleObjects '%s' fontDecoration not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' fontDecoration not equal", i))
       } 
       
       flag <-isTRUE(all.equal(sx$style$borderTop, sy$style$borderTop))
       if(!flag){
         message(sprintf("styleObjects '%s' borderTop not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' borderTop not equal", i))
       }
       
       flag <-isTRUE(all.equal(sx$style$borderLeft, sy$style$borderLeft))
       if(!flag){
         message(sprintf("styleObjects '%s' borderLeft not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' borderLeft not equal", i))
       }
       
       flag <-isTRUE(all.equal(sx$style$borderRight, sy$style$borderRight))
       if(!flag){
         message(sprintf("styleObjects '%s' borderRight not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' borderRight not equal", i))
       }
       
       flag <-isTRUE(all.equal(sx$style$borderBottom, sy$style$borderBottom))
       if(!flag){
         message(sprintf("styleObjects '%s' borderBottom not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' borderBottom not equal", i))
       }
       
       flag <-isTRUE(all.equal(sx$style$borderTopColour, sy$style$borderTopColour))
       if(!flag){
         message(sprintf("styleObjects '%s' borderTopColour not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' borderTopColour not equal", i))
       }
       
       flag <-isTRUE(all.equal(sx$style$borderLeftColour, sy$style$borderLeftColour))
       if(!flag){
         message(sprintf("styleObjects '%s' borderLeftColour not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' borderLeftColour not equal", i))
       }
       
       flag <-isTRUE(all.equal(sx$style$borderRightColour, sy$style$borderRightColour))
       if(!flag){
         message(sprintf("styleObjects '%s' borderRightColour not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' borderRightColour not equal", i))
       }
       
       flag <-isTRUE(all.equal(sx$style$borderBottomColour, sy$style$borderBottomColour))
       if(!flag){
         message(sprintf("styleObjects '%s' borderBottomColour not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' borderBottomColour not equal", i))
       }
       
       
       flag <-isTRUE(all.equal(sx$style$halign, sy$style$halign))
       if(!flag){
         message(sprintf("styleObjects '%s' halign not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' halign not equal", i))
       }
       
       flag <-isTRUE(all.equal(sx$style$valign, sy$style$valign))
       if(!flag){
         message(sprintf("styleObjects '%s' valign not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' valign not equal", i))
       }
       
       flag <-isTRUE(all.equal(sx$style$indent, sy$style$indent))
       if(!flag){
         message(sprintf("styleObjects '%s' indent not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' indent not equal", i))
       }
       
       
       flag <-isTRUE(all.equal(sx$style$textRotation, sy$style$textRotation))
       if(!flag){
         message(sprintf("styleObjects '%s' textRotation not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' textRotation not equal", i))
       }
       
       flag <-isTRUE(all.equal(sx$style$numFmt, sy$style$numFmt))
       if(!flag){
         message(sprintf("styleObjects '%s' numFmt not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' numFmt not equal", i))
       }
       
       flag <-isTRUE(all.equal(sx$style$fill, sy$style$fill))
       if(!flag){
         message(sprintf("styleObjects '%s' fill not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' fill not equal", i))
       }
       
       flag <-isTRUE(all.equal(sx$style$wrapText, sy$style$wrapText))
       if(!flag){
         message(sprintf("styleObjects '%s' wrapText not equal", i))
-        return(FALSE)
+        failures <- c(failures, sprintf("styleObjects '%s' wrapText not equal", i))
       }
       
     }
@@ -3591,19 +3364,19 @@ all.equal.Workbook <- function(target, current, ...){
   flag <- all(x$sheet_names %in% y$sheet_names) & all(y$sheet_names %in% x$sheet_names)
   if(!flag){
     message("names workbook not equal")
-    return(FALSE)
+    failures <- c(failures, "names workbook not equal")
   } 
   
   flag <- all(unlist(x$workbook) %in% unlist(y$workbook)) & all(unlist(y$workbook) %in% unlist(x$workbook))
   if(!flag){
     message("workbook not equal")
-    return(FALSE)
+    failures <- c(failures, "wb$workbook")
   } 
   
   flag <- all(unlist(x$workbook.xml.rels) %in% unlist(y$workbook.xml.rels)) & all(unlist(y$workbook.xml.rels) %in% unlist(x$workbook.xml.rels))
   if(!flag){
     message("workbook.xml.rels not equal")
-    return(FALSE)
+    failures <- c(failures, "wb$workbook.xml.rels")
   } 
   
   
@@ -3615,7 +3388,7 @@ all.equal.Workbook <- function(target, current, ...){
     flag <- all(names(ws_x) %in% names(ws_y)) & all(names(ws_y) %in% names(ws_x))
     if(!flag){
       message(sprintf("names of worksheet elements for sheet %s not equal", i))
-      return(FALSE)
+      failures <- c(failures, sprintf("names of worksheet elements for sheet %s not equal", i))
     } 
     
     nms <- names(ws_x)
@@ -3624,7 +3397,7 @@ all.equal.Workbook <- function(target, current, ...){
       flag <- isTRUE(all.equal(gsub(" |\t", "", ws_x[[j]]), gsub(" |\t", "", ws_y[[j]]))) 
       if(!flag){
         message(sprintf("worksheet '%s', element '%s' not equal", i, j))
-        return(FALSE)
+        failures <- c(failures, sprintf("worksheet '%s', element '%s' not equal", i, j))
       } 
       
     }
@@ -3635,40 +3408,43 @@ all.equal.Workbook <- function(target, current, ...){
   flag <- all(unlist(x$sheetOrder) %in% unlist(y$sheetOrder)) & all(unlist(y$sheetOrder) %in% unlist(x$sheetOrder))
   if(!flag){
     message("sheetOrder not equal")
-    return(FALSE)
+    failures <- c(failures, "sheetOrder not equal")
   } 
   
   
   flag <- length(x$tables) == length(y$tables)
   if(!flag){
     message("length of tables not equal")
-    return(FALSE)
+    failures <- c(failures, "length of tables not equal")
   } 
   
   flag <- all(names(x$tables) == names(y$tables))
   if(!flag){
     message("names of tables not equal")
-    return(FALSE)
+    failures <- c(failures, "names of tables not equal")
   } 
   
   flag <- all(unlist(x$tables) == unlist(y$tables))
   if(!flag){
     message("tables not equal")
-    return(FALSE)
+    failures <- c(failures, "tables not equal")
   } 
   
   
   flag <- isTRUE(all.equal(x$tables.xml.rels, y$tables.xml.rels))
   if(!flag){
     message("tables.xml.rels not equal")
-    return(FALSE)
+    failures <- c(failures, "tables.xml.rels not equal")
   } 
   
   flag <- x$theme == y$theme
   if(!flag){
     message("theme not equal")
-    return(FALSE)
+    failures <- c(failures, "theme not equal")
   }
+  
+  if(!is.null(failures))
+    return(FALSE)
   
   
   #   "connections",
@@ -3786,5 +3562,141 @@ copyWorkbook <- function(wb){
   return(wb$copy())
   
 }
-  
 
+
+
+
+
+#' @name getTables
+#' @title List Excel tables in a workbook
+#' @description List Excel tables in a workbook
+#' @param wb A workbook object 
+#' @param sheet A name or index of a worksheet
+#' @return character vector of table names on the specified sheet
+#' @examples
+#' 
+#' wb <- createWorkbook()
+#' addWorksheet(wb, sheetName = "Sheet 1")
+#' writeDataTable(wb, sheet = "Sheet 1", x = iris)
+#' writeDataTable(wb, sheet = 1, x = mtcars, tableName = "mtcars", startCol = 10)
+#' 
+#' getTables(wb, sheet = "Sheet 1")
+#' 
+#' 
+#' @export
+getTables <- function(wb, sheet){
+  
+  if(!inherits(wb, "Workbook"))
+    stop("argument must be a Workbook.")
+  
+  if(length(sheet) != 1)
+    stop("sheet argument must be length 1")
+  
+  if(length(wb$tables) == 0)
+    return(character(0))
+  
+  sheet <- wb$validateSheet(sheetName = sheet)
+  
+  table_sheets <- attr(wb$tables, "sheet")
+  tables <- attr(wb$tables, "tableName")
+  refs <- names(wb$tables)
+  
+  refs <- refs[table_sheets == sheet & !grepl("openxlsx_deleted", tables, fixed = TRUE)]
+  tables <- tables[table_sheets == sheet & !grepl("openxlsx_deleted", tables, fixed = TRUE)]
+  
+  if(length(tables) > 0)
+    attr(tables, "refs") <- refs
+  
+  return(tables)
+  
+}
+
+
+
+
+
+#' @name removeTable
+#' @title Remove an Excel table in a workbook
+#' @description List Excel tables in a workbook
+#' @param wb A workbook object 
+#' @param sheet A name or index of a worksheet
+#' @param table Name of table to remove. See \code{\link{getTables}}
+#' @return character vector of table names on the specified sheet
+#' @examples
+#' 
+#' wb <- createWorkbook()
+#' addWorksheet(wb, sheetName = "Sheet 1")
+#' addWorksheet(wb, sheetName = "Sheet 2")
+#' writeDataTable(wb, sheet = "Sheet 1", x = iris, tableName = "iris")
+#' writeDataTable(wb, sheet = 1, x = mtcars, tableName = "mtcars", startCol = 10)
+#' 
+#' 
+#' removeWorksheet(wb, sheet = 1) ## delete worksheet removes table objects
+#' 
+#' writeDataTable(wb, sheet = 1, x = iris, tableName = "iris")
+#' writeDataTable(wb, sheet = 1, x = mtcars, tableName = "mtcars", startCol = 10)
+#' 
+#' ## removeTable() deletes table object and all data
+#' getTables(wb, sheet = 1)
+#' removeTable(wb = wb, sheet = 1, table = "iris")
+#' writeDataTable(wb, sheet = 1, x = iris, tableName = "iris", startCol = 1)
+#' 
+#' getTables(wb, sheet = 1)
+#' removeTable(wb = wb, sheet = 1, table = "iris")
+#' writeDataTable(wb, sheet = 1, x = iris, tableName = "iris", startCol = 1)
+#' 
+#' saveWorkbook(wb = wb, file = "removeTableExample.xlsx", overwrite = TRUE)
+#'  
+#' @export
+removeTable <- function(wb, sheet, table){
+  
+  if(!inherits(wb, "Workbook"))
+    stop("argument must be a Workbook.")
+  
+  if(length(sheet) != 1)
+    stop("sheet argument must be length 1")
+  
+  if(length(table) != 1)
+    stop("table argument must be length 1")
+  
+  ## delete table object and all data in it
+  sheet <- wb$validateSheet(sheetName = sheet)
+
+  if(!table %in% attr(wb$tables, "tableName"))
+    stop(sprintf("table '%s' does not exist.", table), call.=FALSE)
+  
+  ## get existing tables
+  table_sheets <- attr(wb$tables, "sheet")
+  table_names <- attr(wb$tables, "tableName")
+  refs <- names(wb$tables)
+  
+  ## delete table object (by flagging as deleted)
+  inds <- which(table_sheets %in% sheet & table_names %in% table)
+  table_name_original <- table_names[inds]
+  
+  table_names[inds] <- paste0(table_name_original, "_openxlsx_deleted")
+  attr(wb$tables, "tableName") <- table_names
+  
+  ## delete reference from worksheet to table
+  worksheet_table_names <- attr(wb$worksheets[[sheet]]$tableParts, "tableName")
+  to_remove <- which(worksheet_table_names == table_name_original)
+  
+  wb$worksheets[[sheet]]$tableParts <- wb$worksheets[[sheet]]$tableParts[-to_remove]
+  attr(wb$worksheets[[sheet]]$tableParts, "tableName") <- worksheet_table_names[-to_remove]
+  
+  
+  ## Now delete data from the worksheet
+  refs <- strsplit(refs[[inds]], split = ":")[[1]]
+  rows <- as.integer(gsub("[A-Z]", "", refs))
+  rows <- seq(from = rows[1], to = rows[2], by = 1)
+  
+  cols <- convertFromExcelRef(refs)
+  cols <- seq(from = cols[1], to = cols[2], by = 1)
+  
+  ## now delete data
+  deleteData(wb = wb, sheet = sheet, rows = rows, cols = cols, gridExpand = TRUE)
+  
+  invisible(0)
+  
+  
+}
