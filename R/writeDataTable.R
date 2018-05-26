@@ -2,13 +2,12 @@
 #' @name writeDataTable
 #' @title Write to a worksheet as an Excel table
 #' @description Write to a worksheet and format as an Excel table
-#' @author Alexander Walker
 #' @param wb A Workbook object containing a 
 #' worksheet.
 #' @param sheet The worksheet to write to. Can be the worksheet index or name.
 #' @param x A dataframe.
-#' @param startCol A vector specifiying the starting column to write df
-#' @param startRow A vector specifiying the starting row to write df
+#' @param startCol A vector specifying the starting column to write df
+#' @param startRow A vector specifying the starting row to write df
 #' @param xy An alternative to specifying startCol and startRow individually.  
 #' A vector of the form c(startCol, startRow)
 #' @param colNames If \code{TRUE}, column names of x are written.
@@ -18,7 +17,9 @@
 #' @param headerStyle Custom style to apply to column names.
 #' @param withFilter If \code{TRUE}, columns with have filters in the first row.
 #' @param keepNA If \code{TRUE}, NA values are converted to #N/A in Excel else NA cells will be empty.
-#' @param sep Only applies to list columns. The seperator used to collapse list columns to a character vector e.g. sapply(x$list_column, paste, collapse = sep).
+#' @param sep Only applies to list columns. The separator used to collapse list columns to a character vector e.g. sapply(x$list_column, paste, collapse = sep).
+#' @param stack If \code{TRUE} the new style is merged with any existing cell styles.  If FALSE, any 
+#' existing style is replaced by the new style.
 #' \cr\cr
 #' \cr\bold{The below options correspond to Excel table options:}
 #' \cr
@@ -28,8 +29,6 @@
 #' @param firstColumn logical. If TRUE, the first column is bold
 #' @param lastColumn logical. If TRUE, the last column is bold
 #' @param bandedRows logical. If TRUE, rows are colour banded
-#' @param stack If \code{TRUE} the new style is merged with any existing cell styles.  If FALSE, any 
-#' existing style is replaced by the new style.
 #' @param bandedCols logical. If TRUE, the columns are colour banded
 #' @details columns of x with class Date/POSIXt, currency, accounting, 
 #' hyperlink, percentage are automatically styled as dates, currency, accounting,
@@ -88,6 +87,34 @@
 #' ## Open in excel without saving file: openXL(wb)
 #' 
 #' saveWorkbook(wb, "writeDataTableExample.xlsx", overwrite = TRUE)
+#' 
+#' 
+#' 
+#' 
+#' 
+#' ##################################################################################### 
+#' ## Pre-defined table styles gallery
+#' 
+#' wb <- createWorkbook(paste0("tableStylesGallery.xlsx"))
+#' addWorksheet(wb, "Style Samples")
+#' for(i in 1:21) {
+#'   style <- paste0("TableStyleLight", i)
+#'   writeDataTable(wb, x=data.frame(style), sheet=1, tableStyle=style, startRow = 1, startCol = i*3-2)
+#' }
+#' 
+#' for(i in 1:28) {
+#'   style <- paste0("TableStyleMedium", i)
+#'   writeDataTable(wb, x=data.frame(style), sheet=1, tableStyle=style, startRow = 4, startCol = i*3-2)
+#' }
+#' 
+#' for(i in 1:11) {
+#'   style <- paste0("TableStyleDark", i)
+#'   writeDataTable(wb, x=data.frame(style), sheet=1, tableStyle=style, startRow = 7, startCol = i*3-2)
+#' } 
+#' 
+#' ## openXL(wb)
+#' saveWorkbook(wb, file = "tableStylesGallery.xlsx", overwrite = TRUE)
+#' 
 writeDataTable <- function(wb, sheet, x,
                            startCol = 1,
                            startRow = 1, 
@@ -137,8 +164,16 @@ writeDataTable <- function(wb, sheet, x,
   
   ## increase scipen to avoid writing in scientific 
   exSciPen <- getOption("scipen")
-  options("scipen" = 10000)
+  od <- getOption("OutDec")
+  exDigits <- getOption("digits")
+  
+  options("scipen" = 200)
+  options("OutDec" = ".")
+  options("digits" = 22)
+  
   on.exit(options("scipen" = exSciPen), add = TRUE)
+  on.exit(expr = options("OutDec" = od), add = TRUE)
+  on.exit(options("digits" = exDigits), add = TRUE)
   
   ## convert startRow and startCol
   if(!is.numeric(startCol))
@@ -147,7 +182,7 @@ writeDataTable <- function(wb, sheet, x,
   
   ##Coordinates for each section
   if(rowNames)
-    x <- cbind(data.frame("row names" = rownames(x)), x)
+    x <- cbind(data.frame("row names" = rownames(x)), as.data.frame(x))
   
   ## If 0 rows append a blank row  
   
@@ -192,8 +227,8 @@ writeDataTable <- function(wb, sheet, x,
     names(x) <- colNames
   }
   
-  ref1 <- paste0(.Call('openxlsx_convert_to_excel_ref', startCol, LETTERS, PACKAGE="openxlsx"), startRow)
-  ref2 <- paste0(.Call('openxlsx_convert_to_excel_ref', startCol+ncol(x)-1, LETTERS, PACKAGE="openxlsx"), startRow + nrow(x))
+  ref1 <- paste0(convert_to_excel_ref(cols = startCol, LETTERS = LETTERS), startRow)
+  ref2 <- paste0(convert_to_excel_ref(cols = startCol+ncol(x)-1, LETTERS = LETTERS), startRow + nrow(x))
   ref <- paste(ref1, ref2, sep = ":")
   
   ## check not overwriting another table

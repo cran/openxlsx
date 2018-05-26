@@ -19,7 +19,7 @@ conditionalFormatting(wb, sheet, cols, rows, rule = NULL, style = NULL,
 
 \item{rule}{The condition under which to apply the formatting. See examples.}
 
-\item{style}{A style to apply to those cells that satisify the rule. Default is createStyle(fontColour = "#9C0006", bgFill = "#FFC7CE")}
+\item{style}{A style to apply to those cells that satisfy the rule. Default is createStyle(fontColour = "#9C0006", bgFill = "#FFC7CE")}
 
 \item{type}{Either 'expression', 'colorscale', 'databar', 'duplicates' or "contains' (case insensitive).}
 
@@ -46,7 +46,7 @@ If type == "colourScale"
 If type == "databar"
 \itemize{
   \item{style is a vector of colours with length 2 or 3}
-  \item{rule is a numeric vector specifiying the range of the databar colours. Must be equal length to style}
+  \item{rule is a numeric vector specifying the range of the databar colours. Must be equal length to style}
   \item{...
   \itemize{
     \item{\bold{showvalue} If FALSE the cell value is hidden. Default TRUE.}
@@ -79,7 +79,7 @@ wb <- createWorkbook()
 addWorksheet(wb, "cellIs")
 addWorksheet(wb, "Moving Row")
 addWorksheet(wb, "Moving Col")
-addWorksheet(wb, "Dependent on 1")
+addWorksheet(wb, "Dependent on")
 addWorksheet(wb, "Duplicates")
 addWorksheet(wb, "containsText")
 addWorksheet(wb, "colourScale", zoom = 30)
@@ -109,10 +109,16 @@ conditionalFormatting(wb, "Moving Col", cols=1:2, rows=1:11, rule="A$1<0", style
 conditionalFormatting(wb, "Moving Col", cols=1:2, rows=1:11, rule="A$1>0", style = posStyle)
 
 ## highlight entire range cols X rows dependent only on cell A1
-writeData(wb, "Dependent on 1", -5:5)
-writeData(wb, "Dependent on 1", LETTERS[1:11], startCol=2)
-conditionalFormatting(wb, "Dependent on 1", cols=1:2, rows=1:11, rule="$A$1<0", style = negStyle)
-conditionalFormatting(wb, "Dependent on 1", cols=1:2, rows=1:11, rule="$A$1>0", style = posStyle)
+writeData(wb, "Dependent on", -5:5)
+writeData(wb, "Dependent on", LETTERS[1:11], startCol=2)
+conditionalFormatting(wb, "Dependent on", cols=1:2, rows=1:11, rule="$A$1<0", style = negStyle)
+conditionalFormatting(wb, "Dependent on", cols=1:2, rows=1:11, rule="$A$1>0", style = posStyle)
+
+## highlight cells in column 1 based on value in column 2
+writeData(wb, "Dependent on", data.frame(x = 1:10, y = runif(10)), startRow = 15)
+conditionalFormatting(wb, "Dependent on", cols=1, rows=16:25, rule="B16<0.5", style = negStyle)
+conditionalFormatting(wb, "Dependent on", cols=1, rows=16:25, rule="B16>=0.5", style = posStyle)
+
 
 ## highlight duplicates using default style
 writeData(wb, "Duplicates", sample(LETTERS[1:15], size = 10, replace = TRUE))

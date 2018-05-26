@@ -69,8 +69,26 @@ genClientData <- function(col, row, visible, height, width){
 # }
 
 
-genBaseCore <- function(creator){  
-  sprintf('<dcterms:created xsi:type="dcterms:W3CDTF">2014-03-07T16:08:25Z</dcterms:created><dc:creator>%s</dc:creator>', creator)
+genBaseCore <- function(creator = "", title = NULL, subject = NULL, category = NULL){  
+  
+  core <- '<coreProperties xmlns="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
+  
+  core <- c(core, sprintf('<dc:creator>%s</dc:creator>', creator))
+  core <- c(core, sprintf('<dcterms:created xsi:type="dcterms:W3CDTF">%s</dcterms:created>', format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ")))
+  
+  if(!is.null(title))
+    core <- c(core, sprintf('<dc:title>%s</dc:title>', replaceIllegalCharacters(title)))
+  
+  if(!is.null(subject))
+    core <- c(core, sprintf('<dc:subject>%s</dc:subject>', replaceIllegalCharacters(subject)))
+  
+  if(!is.null(category))
+    core <- c(core, sprintf('<cp:category>%s</cp:category>', replaceIllegalCharacters(category)))
+
+  core <- c(core, '</coreProperties>')
+  
+  return(core)
+  
 } 
 
 
@@ -167,25 +185,6 @@ genBasePic <- function(imageNo){
 }
 
 
-genBaseTable <- function(id, ref, colNames){
-  
-  
-  table <- sprintf('<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="%s" name="Table%s" displayName="Table%s" ref="%s" totalsRowShown="0">', id, id, id, ref)
-  table <- c(table, sprintf('<autoFilter ref="%s"/>', ref))
-  
-  tableCols <- NULL
-  for(i in 1:length(colNames))
-    tableCols <- c(tableCols, sprintf('<tableColumn id="%s" name="%s"/>', i, colNames[[i]]))
-  
-  tableCols <- c(sprintf('<tableColumns count="%s">', length(colNames)), tableCols, '</tableColumns>')
-  tableStyle <- '<tableStyleInfo name="TableStyleLight9" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/>'
-  
-  
-  table <- paste(c(table, tableCols, tableStyle, '</table>'))
-  writeLines(table)
-  
-  
-}
 
 
 

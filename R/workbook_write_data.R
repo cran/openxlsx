@@ -44,7 +44,14 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
     
     pInds <- which(sapply(colClasses, function(x) any(c("posixct", "posixt", "posixlt") %in% x)))
     if(length(pInds) > 0 & nRows > 0){
-      t <- sapply(pInds,  function(i) format(df[[i]][[1]], "%z"))
+      t <- sapply(pInds,  function(i) {
+        tzi <- format(df[[i]][[1]], "%z")
+        if(is.na(tzi)){
+          tz_tmp <- na.omit(df[[i]])
+          tzi <- ifelse(length(tz_tmp) > 0, format(tz_tmp[1], "%z"), NA)
+        }
+        return(tzi)
+      })
       
       offSet <- suppressWarnings(ifelse(substr(t,1,1) == "+", 1L, -1L) * (as.integer(substr(t,2,3)) + as.integer(substr(t,4,5)) / 60) / 24)
       
@@ -110,7 +117,7 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
   
   
   ## cell types
-  t <- .Call("openxlsx_build_cell_types_integer", colClasses, nRows, PACKAGE = "openxlsx")
+  t <- build_cell_types_integer(classes = colClasses, n_rows = nRows)
   
   for(i in which(sapply(colClasses, function(x) !"character" %in% x & !"numeric" %in% x)))
     df[[i]] <- as.character(df[[i]])
@@ -163,24 +170,30 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
     rm(formula_cols)
     rm(formula_strs)
     rm(formula_inds)
-
+    
     
   }
   
   suppressWarnings(try(rm(df), silent = TRUE))
   
-  
   ##Append hyperlinks, convert h to s in cell type
   hyperlink_cols <- which(sapply(colClasses, function(x) "hyperlink" %in% x, USE.NAMES = FALSE), useNames = FALSE)
   if(length(hyperlink_cols) > 0){
     
-    hyperlink_inds <- which(t == 9L)
-    
+    hyperlink_inds <- sort(unlist(lapply(hyperlink_cols, function(i) i + (1:(nRows - colNames) - 1)*nCols + (colNames * nCols)), use.names = FALSE))
+    na_hyperlink <- intersect(hyperlink_inds, which(is.na(t)))
+
     if(length(hyperlink_inds) > 0){
-      t[hyperlink_inds] <- 1L ## "s"
- 
-      hyperlink_refs <- .Call("openxlsx_convert_to_excel_ref_expand", hyperlink_cols + startCol - 1, LETTERS, as.character((startRow + colNames):(startRow+nRows - 1L)))
+      t[t %in% 9] <- 1L ## set cell type to "s"
       
+      hyperlink_refs <- convert_to_excel_ref_expand(cols = hyperlink_cols + startCol - 1, LETTERS = LETTERS, rows = as.character((startRow + colNames):(startRow+nRows - 1L)) )
+      
+      if(length(na_hyperlink) > 0){
+        to_remove <- which(hyperlink_inds %in% na_hyperlink)
+        hyperlink_refs <- hyperlink_refs[-to_remove]
+        hyperlink_inds <- hyperlink_inds[-to_remove]
+      }
+        
       exHlinks <- worksheets[[sheet]]$hyperlinks
       targets <- replaceIllegalCharacters(v[hyperlink_inds])
       

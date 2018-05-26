@@ -61,6 +61,22 @@ CharacterVector get_shared_strings(std::string xmlFile, bool isFile){
   std::string tag = ">";
   std::string tagEnd = "<";
   
+  // Check for rPh and remove if found
+  std::string rPh_tag = "<rPh";
+  std::string rPh_tag_end = "rPh>";
+  
+  for(int i = 0; i < n; i++){
+    xml = x[i]; // find opening tag  
+    pos = xml.find(rPh_tag, 0); // find ttag      
+    if(pos != std::string::npos){
+      if(xml[pos+2] != '/'){
+        endPos = xml.find(rPh_tag_end, pos+2);
+        xml.erase(pos, endPos - pos + 4);
+        x[i] = xml;
+      }
+    }
+  }
+  
   
   // Now check for inline formatting
   pos = line.find("<rPr>", 0);
@@ -476,8 +492,8 @@ SEXP read_workbook(IntegerVector cols_in,
     int row_1 = rows[0];
     char name[6];
     
-    IntegerVector row_inds = which_cpp(rows == row_1);
-    IntegerVector header_cols = cols[row_inds];
+    IntegerVector row1_inds = which_cpp(rows == row_1);
+    IntegerVector header_cols = cols[row1_inds];
     IntegerVector header_inds = match(seq(0, nCols), na_omit(header_cols));
     LogicalVector missing_header = is_na(header_inds);
     
@@ -492,6 +508,11 @@ SEXP read_workbook(IntegerVector cols_in,
       }else{  // this is a header elements 
         
         col_names[i] = v[pos];
+        if(col_names[i] == "NA"){
+          sprintf(&(name[0]), "X%d", i+1);
+          col_names[i] = name;
+        }
+        
         pos++;
         
       }

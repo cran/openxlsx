@@ -5,8 +5,8 @@
 #' @param wb A Workbook object containing a worksheet.
 #' @param sheet The worksheet to write to. Can be the worksheet index or name.
 #' @param x Object to be written. For classes supported look at the examples.
-#' @param startCol A vector specifiying the starting column to write to.
-#' @param startRow A vector specifiying the starting row to write to.
+#' @param startCol A vector specifying the starting column to write to.
+#' @param startRow A vector specifying the starting row to write to.
 #' @param xy An alternative to specifying \code{startCol} and
 #' \code{startRow} individually.  A vector of the form
 #' \code{c(startCol, startRow)}.
@@ -40,12 +40,13 @@
 #' @param withFilter If \code{TRUE}, add filters to the column name row. NOTE can only have one filter per worksheet. 
 #' @param keepNA If \code{TRUE}, NA values are converted to #N/A in Excel else NA cells will be empty.
 #' @param name If not NULL, a named region is defined.
-#' @param sep Only applies to list columns. The seperator used to collapse list columns to a character vector e.g. sapply(x$list_column, paste, collapse = sep).
+#' @param sep Only applies to list columns. The separator used to collapse list columns to a character vector e.g. sapply(x$list_column, paste, collapse = sep).
 #' @seealso \code{\link{writeDataTable}}
 #' @export writeData
 #' @details Formulae written using writeFormula to a Workbook object will not get picked up by read.xlsx().
 #' This is because only the formula is written and left to Excel to evaluate the formula when the file is opened in Excel.
 #' @rdname writeData
+#' @return invisible(0)
 #' @examples
 #' 
 #' ## See formatting vignette for further examples. 
@@ -153,12 +154,15 @@ writeData <- function(wb,
   
   ## increase scipen to avoid writing in scientific 
   exSciPen <- getOption("scipen")
-  options("scipen" = 200)
-  on.exit(options("scipen" = exSciPen), add = TRUE)
-  
-  
+  od <- getOption("OutDec")
   exDigits <- getOption("digits")
+  
+  options("scipen" = 200)
+  options("OutDec" = ".")
   options("digits" = 22)
+  
+  on.exit(options("scipen" = exSciPen), add = TRUE)
+  on.exit(expr = options("OutDec" = od), add = TRUE)
   on.exit(options("digits" = exDigits), add = TRUE)
   
   
@@ -231,6 +235,10 @@ writeData <- function(wb,
   
   ## If no rows and not writing column names return as nothing to write
   if(nRow == 0 & !colNames)
+    return(invisible(0))
+  
+  ## If no columns and not writing row names return as nothing to write
+  if(nCol == 0 & !rowNames)
     return(invisible(0))
   
   colClasses <- lapply(x, function(x) tolower(class(x)))
@@ -306,9 +314,9 @@ writeData <- function(wb,
   ## named region
   if(!is.null(name)){
     
-    ref1 <- paste0("$", .Call("openxlsx_convert_to_excel_ref", startCol, LETTERS, PACKAGE = "openxlsx"), "$", startRow)
-    ref2 <- paste0("$", .Call("openxlsx_convert_to_excel_ref", startCol + nCol - 1L, LETTERS, PACKAGE = "openxlsx"), "$", startRow + nRow - 1L + colNames)
-    wb$createNamedRegion(ref1 = ref1, ref2 = ref2, name = name, sheet = wb$sheet_names[sheet])
+    ref1 <- paste0("$", convert_to_excel_ref(cols = startCol, LETTERS = LETTERS), "$", startRow)
+    ref2 <- paste0("$", convert_to_excel_ref(cols = startCol + nCol - 1L, LETTERS = LETTERS), "$", startRow + nRow - 1L + colNames)
+    wb$createNamedRegion(ref1 = ref1, ref2 = ref2, name = name, sheet = wb$sheet_names[wb$validateSheet(sheet)])
     
   }
   
@@ -384,8 +392,8 @@ writeData <- function(wb,
 #' @param wb A Workbook object containing a worksheet.
 #' @param sheet The worksheet to write to. Can be the worksheet index or name.
 #' @param x A character vector.
-#' @param startCol A vector specifiying the starting column to write to.
-#' @param startRow A vector specifiying the starting row to write to.
+#' @param startCol A vector specifying the starting column to write to.
+#' @param startRow A vector specifying the starting row to write to.
 #' @param xy An alternative to specifying \code{startCol} and
 #' \code{startRow} individually.  A vector of the form
 #' \code{c(startCol, startRow)}.
