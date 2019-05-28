@@ -1,4 +1,4 @@
-44a6486fc3027e90bdaf916434531c23 *DESCRIPTION
+f4408fd6d9372512c4d929ab3a8e908c *DESCRIPTION
 34ede6c3664142c50ad8a23be26c3d02 *LICENSE
 bc036141e3ba9dcaa157bfb5170e9d22 *NAMESPACE
 df4a4352e9954c06feab2c40eadabf13 *NEWS
@@ -29,13 +29,13 @@ d5a546cb9a2f2ffbdbe8867986e34259 *R/writeData.R
 0b2c5dde0d5f92750aee6c235078907f *R/writeDataTable.R
 a92fd6f051fe2e1c61de61ae836da56e *R/writexlsx.R
 0aca8da918a0edd160538dab555f8b4f *README.md
-847f6ead756262ee3df2d64414162d97 *build/vignette.rds
+b4c4bb6a182d42f50d64b649b4efced5 *build/vignette.rds
 0a1058306d10154489045e95ab794c3c *inst/build_font_size_lookup.R
 76802f11c11b03e15f206b838a0292c5 *inst/conditional_formatting_testing.R
 934ca422f505c7b0e303423a4e84eaa6 *inst/doc/Introduction.Rnw
-021b1a0e1a7ddf434b2a4bc6bdf5332c *inst/doc/Introduction.pdf
+580ae7d107f98adc90958ad42e1d5bdf *inst/doc/Introduction.pdf
 5edb40bc2f8f5c786336737101cc12f2 *inst/doc/formatting.Rnw
-d9b3502379e682e31efa8dfd31be948f *inst/doc/formatting.pdf
+0c1d3b8b059b949e9661302e30a49458 *inst/doc/formatting.pdf
 36a7feeb6214d7e79ac8b89df3c45df0 *inst/einstein.jpg
 fb9a2de7bc2ec82fe52394335d80050d *inst/loadExample.xlsx
 e088897249f5068b3b4dc5401ec4303d *inst/load_xlsx_testing.R
@@ -113,7 +113,7 @@ f8185eb2ed8fd8617bb95ab5f0e98675 *man/write.xlsx.Rd
 df39b67ebb553625cba72a141651025d *src/load_workbook.cpp
 a73ff29f9d5f14a3edcba7be91bcf094 *src/openxlsx.h
 01fd00c85ddef300679570cdb9b19a1a *src/openxlsx_init.c
-9084985babe17be5bfcefa56e99be012 *src/read_workbook.cpp
+89902e2b17e02d14de427fb9cacdf9be *src/read_workbook.cpp
 1c7fe1b7901441fe3e3af8fe2b60a309 *src/write_data.cpp
 611ded4261c97754f9559f1ca0ee2926 *src/write_file.cpp
 4d6151cde1d83615f447730f2ed5f436 *src/write_file_2.cpp
