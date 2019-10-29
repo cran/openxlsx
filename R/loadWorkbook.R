@@ -6,6 +6,7 @@
 #' @author Alexander Walker
 #' @param file A path to an existing .xlsx or .xlsm file
 #' @param xlsxFile alias for file
+#' @param isUnzipped Set to TRUE if the xlsx file is already unzipped
 #' @description  loadWorkbook returns a workbook object conserving styles and 
 #' formatting of the original .xlsx file. 
 #' @return Workbook object. 
@@ -13,32 +14,41 @@
 #' @seealso \code{\link{removeWorksheet}}
 #' @examples
 #' ## load existing workbook from package folder
-#' wb <- loadWorkbook(file = system.file("loadExample.xlsx", package= "openxlsx"))
+#' wb <- loadWorkbook(file = system.file("extdata","loadExample.xlsx", package= "openxlsx"))
 #' names(wb)  #list worksheets
 #' wb ## view object
 #' ## Add a worksheet
 #' addWorksheet(wb, "A new worksheet")
 #' 
 #' ## Save workbook
-#' saveWorkbook(wb, "loadExample.xlsx", overwrite = TRUE)
-loadWorkbook <- function(file, xlsxFile = NULL){
+#' \dontrun{saveWorkbook(wb, "loadExample.xlsx", overwrite = TRUE)}
+#' 
+#' 
+loadWorkbook <- function(file, xlsxFile = NULL, isUnzipped = FALSE){
   
-  if(!is.null(xlsxFile))
-    file <- xlsxFile
-  
-  file <- getFile(file)
-  
-  file <- getFile(file)
-  if(!file.exists(file))
-    stop("File does not exist.")
+  ## If this is a unzipped workbook, skip the temp dir stuff
+  if(isUnzipped){
+    xmlDir <- file
+    xmlFiles <- list.files(path = xmlDir, full.names = TRUE, recursive = TRUE, all.files = TRUE)
+  }else{
+    
+    if(!is.null(xlsxFile))
+      file <- xlsxFile
+    
+    file <- getFile(file)
+    
+    file <- getFile(file)
+    if(!file.exists(file))
+      stop("File does not exist.")
+    
+    ## create temp dir
+    xmlDir <- file.path(tempdir(),  paste0(tempfile(tmpdir = ""), "_openxlsx_loadWorkbook"))
+    
+    ## Unzip files to temp directory
+    xmlFiles <- unzip(file, exdir = xmlDir)
+  }
   
   wb <- createWorkbook()
-  
-  ## create temp dir
-  xmlDir <- file.path(tempdir(),  paste0(tempfile(tmpdir = ""), "_openxlsx_loadWorkbook"))
-  
-  ## Unzip files to temp directory
-  xmlFiles <- unzip(file, exdir = xmlDir)
   
   ## Not used
   # .relsXML           <- xmlFiles[grepl("_rels/.rels$", xmlFiles, perl = TRUE)]
@@ -87,7 +97,9 @@ loadWorkbook <- function(file, xlsxFile = NULL){
   vbaProject         <- xmlFiles[grepl("vbaProject\\.bin$", xmlFiles, perl = TRUE)]
   
   ## remove all EXCEPT media and charts
-  on.exit(expr = unlink(xmlFiles[!grepl("charts|media|vmlDrawing|comment|embeddings|pivot|slicer|vbaProject", xmlFiles, ignore.case = TRUE)], recursive = TRUE, force = TRUE), add = TRUE)
+  if(!isUnzipped){
+    on.exit(expr = unlink(xmlFiles[!grepl("charts|media|vmlDrawing|comment|embeddings|pivot|slicer|vbaProject", xmlFiles, ignore.case = TRUE)], recursive = TRUE, force = TRUE), add = TRUE)
+  }
   
   ## core
   if(length(coreXML) == 1){
@@ -135,7 +147,15 @@ loadWorkbook <- function(file, xlsxFile = NULL){
     workbook <- readLines(workbookXML, warn=FALSE, encoding="UTF-8")
     workbook <-  removeHeadTag(workbook)
     
-    sheets <- unlist(regmatches(workbook, gregexpr("<sheet .*/sheets>", workbook, perl = TRUE)))
+    sheets <- unlist(regmatches(workbook, gregexpr("(?<=<sheets>).*(?=</sheets>)", workbook, perl = TRUE)))
+    sheets <- unlist(regmatches(sheets, gregexpr("<sheet[^>]*>", sheets, perl=TRUE)))
+    
+    ## Some veryHidden sheets do not have a sheet content and their rId is empty.
+    ## Such sheets need to be filtered out because otherwise their sheet names
+    ## occur in the list of all sheet names, leading to a wrong association
+    ## of sheet names with sheet indeces.
+    sheets <- grep('r:id="[[:blank:]]*"', sheets, invert = TRUE, value = TRUE)
+    
     
     ## sheetId is meaningless
     ## sheet rId links to the workbook.xml.resl which links worksheets/sheet(i).xml file
@@ -144,6 +164,8 @@ loadWorkbook <- function(file, xlsxFile = NULL){
     sheetrId <- unlist(getRId(sheets))
     sheetId <- unlist(regmatches(sheets, gregexpr('(?<=sheetId=")[0-9]+', sheets, perl = TRUE)))
     sheetNames <- unlist(regmatches(sheets, gregexpr('(?<=name=")[^"]+', sheets, perl = TRUE)))
+    sheetNames <- replaceXMLEntities(sheetNames)
+    
     
     is_chart_sheet <- sheetrId %in% chartSheetRIds
     is_visible <- !grepl("hidden",  unlist(strsplit(sheets, split = "<sheet "))[-1])
@@ -189,8 +211,12 @@ loadWorkbook <- function(file, xlsxFile = NULL){
     
     
     workbookPr <- getChildlessNode(xml = workbook, tag = "<workbookPr ")
-    if(length(calcPr) > 0)
+    if(length(workbookPr) > 0)
       wb$workbook$workbookPr <- workbookPr
+    
+    workbookProtection <- getChildlessNode(xml = workbook, tag = "<workbookProtection ")
+    if(length(workbookProtection) > 0)
+      wb$workbook$workbookProtection <- workbookProtection
     
     
     ## defined Names
@@ -751,7 +777,7 @@ loadWorkbook <- function(file, xlsxFile = NULL){
       hasDrawing <- sapply(drawXMLrelationship, length) > 0 ## which sheets have a drawing
       
       commentXMLrelationship <- lapply(xml, function(x) x[grepl("comments[0-9]+\\.xml", x)])
-      hasComment <- sapply(drawXMLrelationship, length) > 0 ## which sheets have a drawing
+      hasComment <- sapply(commentXMLrelationship, length) > 0 ## which sheets have a comment
       
       for(i in 1:length(xml)){
         

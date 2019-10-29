@@ -7,15 +7,15 @@ WorkSheet$methods(initialize = function(showGridLines = TRUE,
                                         tabColour = NULL, 
                                         zoom = 100, 
                                         
-                                        oddHeader,
-                                        oddFooter,
-                                        evenHeader, 
-                                        evenFooter, 
-                                        firstHeader, 
-                                        firstFooter,
+                                        oddHeader = NULL,
+                                        oddFooter = NULL,
+                                        evenHeader = NULL,
+                                        evenFooter = NULL,
+                                        firstHeader = NULL,
+                                        firstFooter = NULL,
                                         
-                                        paperSize, 
-                                        orientation,
+                                        paperSize = 9, 
+                                        orientation = 'portrait',
                                         hdpi = 300,
                                         vdpi = 300){
   
@@ -126,6 +126,9 @@ WorkSheet$methods(get_post_sheet_data = function(){
   
   
   xml <- ""
+  
+  if (length(sheetProtection) > 0)
+    xml <- paste0(xml, sheetProtection, collapse = "")
   
   if(length(autoFilter) > 0)
     xml <- paste0(xml, autoFilter, collapse = "")
