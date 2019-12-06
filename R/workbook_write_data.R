@@ -3,7 +3,7 @@
 
 
 
-Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, colClasses, hlinkNames, keepNA, list_sep){
+Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, colClasses, hlinkNames, keepNA, na.string, list_sep){
   
   sheet <- validateSheet(sheet)
   nCols <- ncol(df)
@@ -34,7 +34,7 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
     dInds <- which(sapply(colClasses, function(x) "date" %in% x))
     
     origin <- 25569L
-    if(grepl('date1904="1"|date1904="true"', paste(unlist(workbook), collapse = ""), ignore.case = TRUE))
+    if(grepl('date1904="1"|date1904="true"', stri_join(unlist(workbook), collapse = ""), ignore.case = TRUE))
       origin <- 24107L
     
     for(i in dInds)
@@ -72,6 +72,7 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
     cInds <- which(sapply(colClasses, function(x) any(c("accounting", "currency", "percentage", "3", "comma") %in% tolower(x))))
     for(i in cInds)
       df[[i]] <- as.numeric(gsub("[^0-9\\.-]", "", df[[i]], perl = TRUE))
+    class(df[[i]]) <- "numeric"
   }
   
   ## convert scientific
@@ -83,7 +84,7 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
   ##
   if("list" %in% allColClasses){
     for(i in which(sapply(colClasses, function(x) "list" %in% x)))
-      df[[i]] <- sapply(lapply(df[[i]], unlist), paste, collapse = list_sep)
+      df[[i]] <- sapply(lapply(df[[i]], unlist), stri_join, collapse = list_sep)
   }
   
   if("formula" %in% allColClasses){
@@ -100,6 +101,7 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
   
   colClasses <- sapply(df, function(x) tolower(class(x))[[1]]) ## by here all cols must have a single class only
   
+  
   ## convert logicals (Excel stores logicals as 0 & 1)
   if("logical" %in% allColClasses){
     for(i in which(sapply(colClasses, function(x) "logical" %in% x)))
@@ -107,10 +109,14 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
   }
   
   ## convert all numerics to character (this way preserves digits)
-  if("numeric" %in% allColClasses){
+  if("numeric" %in% colClasses){
     for(i in which(sapply(colClasses, function(x) "numeric" %in% x)))
       class(df[[i]]) <- "character"
   }
+  
+ 
+  
+  
   
   ## End standardise all column types
   ###################################################################### 
@@ -128,12 +134,14 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
   )));
   
   
-  
-  
-  
   if(keepNA){
-    t[is.na(v)] <- 4L
-    v[is.na(v)] <- "#N/A"
+    if(is.null(na.string)){
+      t[is.na(v)] <- 4L
+      v[is.na(v)] <- "#N/A"
+    }else{
+      t[is.na(v)] <- 1L
+      v[is.na(v)] <- as.character(na.string)
+    }
   }else{
     t[is.na(v)] <- as.integer(NA)  
     v[is.na(v)] <- as.character(NA)
@@ -162,7 +170,7 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
     
     ## alter the elements of t where we have a formula to be "str"
     formula_cols <- which(sapply(colClasses, function(x) "openxlsx_formula" %in% x, USE.NAMES = FALSE), useNames = FALSE)
-    formula_strs <- paste0("<f>", unlist(df[formula_cols], use.names = FALSE), "</f>")
+    formula_strs <- stri_join("<f>", unlist(df[formula_cols], use.names = FALSE), "</f>")
     formula_inds <- unlist(lapply(formula_cols, function(i) i + (1:(nRows - colNames) - 1)*nCols + (colNames * nCols)), use.names = FALSE)
     f_in[formula_inds] <- formula_strs
     any_functions <- TRUE
@@ -222,7 +230,7 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
   if(length(newStrs) > 0){
     
     newStrs <- replaceIllegalCharacters(newStrs)
-    newStrs <- paste0("<si><t xml:space=\"preserve\">", newStrs, "</t></si>")
+    newStrs <- stri_join("<si><t xml:space=\"preserve\">", newStrs, "</t></si>")
     
     uNewStr <- unique(newStrs)
     

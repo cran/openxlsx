@@ -15,6 +15,12 @@ Excel alphanumeric cell reference
 \description{
 Return excel cell coordinates from (x,y) coordinates
 }
+\examples{
+getCellRefs(data.frame(1,2)) 
+# "B1"
+getCellRefs(data.frame(1:3,2:4))
+# "B1" "C2" "D3"
+}
 \author{
-Alexander Walker
+Philipp Schauberger, Alexander Walker
 }

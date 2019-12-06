@@ -4,12 +4,25 @@
 \alias{writeData}
 \title{Write an object to a worksheet}
 \usage{
-writeData(wb, sheet, x, startCol = 1, startRow = 1, xy = NULL,
-  colNames = TRUE, rowNames = FALSE, headerStyle = NULL,
+writeData(
+  wb,
+  sheet,
+  x,
+  startCol = 1,
+  startRow = 1,
+  xy = NULL,
+  colNames = TRUE,
+  rowNames = FALSE,
+  headerStyle = NULL,
   borders = c("none", "surrounding", "rows", "columns", "all"),
   borderColour = getOption("openxlsx.borderColour", "black"),
   borderStyle = getOption("openxlsx.borderStyle", "thin"),
-  withFilter = FALSE, keepNA = FALSE, name = NULL, sep = ", ")
+  withFilter = FALSE,
+  keepNA = FALSE,
+  na.string = NULL,
+  name = NULL,
+  sep = ", "
+)
 }
 \arguments{
 \item{wb}{A Workbook object containing a worksheet.}
@@ -61,7 +74,9 @@ each column. If "\code{all}" all cell borders are drawn.}
 
 \item{withFilter}{If \code{TRUE}, add filters to the column name row. NOTE can only have one filter per worksheet.}
 
-\item{keepNA}{If \code{TRUE}, NA values are converted to #N/A in Excel else NA cells will be empty.}
+\item{keepNA}{If \code{TRUE}, NA values are converted to #N/A (or \code{na.string}, if not NULL) in Excel, else NA cells will be empty.}
+
+\item{na.string}{If not NULL, and if \code{keepNA} is \code{TRUE}, NA values are converted to this string in Excel.}
 
 \item{name}{If not NULL, a named region is defined.}
 
@@ -142,7 +157,7 @@ writeData(wb, "Cars", x, colNames = TRUE, rowNames = TRUE,
 ## - vectors/columns with class 'hyperlink' are written as hyperlinks'
 
 v <- rep("https://CRAN.R-project.org/", 4)
-names(v) <- paste("Hyperlink", 1:4) # Optional: names will be used as display text
+names(v) <- paste0("Hyperlink", 1:4) # Optional: names will be used as display text
 class(v) <- 'hyperlink'
 writeData(wb, "Cars", x = v, xy = c("B", 32))
 
@@ -152,7 +167,7 @@ writeData(wb, "Cars", x = v, xy = c("B", 32))
 ## - vectors/columns with class 'formula' are written as formulas'
 
 df <- data.frame(x=1:3, y = 1:3,
-                 z = paste(paste0("A", 1:3+1L), paste0("B", 1:3+1L), sep = " + "),
+                 z = paste0(paste0("A", 1:3+1L), paste0("B", 1:3+1L), sep = " + "),
                  stringsAsFactors = FALSE)
 
 class(df$z) <- c(class(df$z), "formula")
