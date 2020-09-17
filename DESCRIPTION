@@ -1,8 +1,8 @@
 Type: Package
 Package: openxlsx
 Title: Read, Write and Edit xlsx Files
-Version: 4.1.5
-Date: 2020-05-06
+Version: 4.2.2
+Date: 2020-09-14
 Language: en-US
 Authors@R: 
     c(person(given = "Philipp",
@@ -15,6 +15,9 @@ Authors@R:
              email = "Alexander.Walker1989@gmail.com"),
       person(given = "Luca",
              family = "Braglia",
+             role = "ctb"),
+      person(given = "Joshua",
+             family = "Sturm",
              role = "ctb"))
 Description: Simplifies the creation of Excel .xlsx files by
     providing a high level interface to writing, styling and editing
@@ -27,11 +30,11 @@ URL: https://ycphs.github.io/openxlsx/index.html,
 BugReports: https://github.com/ycphs/openxlsx/issues
 Depends: R (>= 3.3.0)
 Imports: grDevices, methods, Rcpp, stats, utils, zip, stringi
-Suggests: knitr, testthat, roxygen2
+Suggests: knitr, testthat, roxygen2, rmarkdown
 LinkingTo: Rcpp
 VignetteBuilder: knitr
 Encoding: UTF-8
-RoxygenNote: 7.1.0
+RoxygenNote: 7.1.1
 Collate: 'CommentClass.R' 'HyperlinkClass.R' 'RcppExports.R'
         'class_definitions.R' 'StyleClass.R' 'WorkbookClass.R'
         'baseXML.R' 'borderFunctions.R' 'chartsheet_class.R'
@@ -42,10 +45,11 @@ Collate: 'CommentClass.R' 'HyperlinkClass.R' 'RcppExports.R'
         'workbook_write_data.R' 'worksheet_class.R' 'wrappers.R'
         'writeData.R' 'writeDataTable.R' 'writexlsx.R'
 NeedsCompilation: yes
-Packaged: 2020-05-06 15:47:38 UTC; ceadm
+Packaged: 2020-09-14 07:20:06 UTC; philipp
 Author: Philipp Schauberger [aut, cre],
   Alexander Walker [aut],
-  Luca Braglia [ctb]
+  Luca Braglia [ctb],
+  Joshua Sturm [ctb]
 Maintainer: Philipp Schauberger <philipp@schauberger.co.at>
 Repository: CRAN
-Date/Publication: 2020-05-06 17:50:03 UTC
+Date/Publication: 2020-09-17 08:10:07 UTC

@@ -56,7 +56,7 @@ WorkSheet$methods(initialize = function(showGridLines = TRUE,
   sheetPr <<- tabColour
   dimension <<- '<dimension ref="A1"/>'
   sheetViews <<- sprintf('<sheetViews><sheetView workbookViewId="0" zoomScale="%s" showGridLines="%s" tabSelected="%s"/></sheetViews>', as.integer(zoom), as.integer(showGridLines), as.integer(tabSelected))
-  sheetFormatPr <<- '<sheetFormatPr defaultRowHeight="15.0"/>'
+  sheetFormatPr <<- '<sheetFormatPr defaultRowHeight="15.0" baseColWidth="10"/>'
   cols <<- character(0)
 
   autoFilter <<- character(0)
@@ -203,14 +203,6 @@ WorkSheet$methods(get_post_sheet_data = function() {
       collapse = ""
     )
   }
-
-
-
-
-
-
-
-
 
   if (length(drawing) > 0) {
     xml <- paste0(xml, drawing, collapse = "")

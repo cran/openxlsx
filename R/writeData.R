@@ -20,7 +20,7 @@
 #' a surrounding border is drawn with a border around each row. If
 #' "\code{columns}", a surrounding border is drawn with a border between
 #' each column. If "\code{all}" all cell borders are drawn.
-#' @param borderColour Colour of cell border.  A valid colour (belonging to \code{colours()} or a hex colour code, eg see \href{http://www.colorpicker.com}{here}).
+#' @param borderColour Colour of cell border.  A valid colour (belonging to \code{colours()} or a hex colour code, eg see \href{https://www.webfx.com/web-design/color-picker/}{here}).
 #' @param borderStyle Border line style
 #' \itemize{
 #'    \item{\bold{none}}{ no border}
@@ -271,12 +271,18 @@ writeData <- function(wb,
   colClasss2 <- colClasses
   colClasss2[sapply(colClasses, function(x) "formula" %in% x) & sapply(colClasses, function(x) "hyperlink" %in% x)] <- "formula"
 
+  if (is.numeric(sheet)) {
+    sheetX <- wb$validateSheet(sheet)
+  } else {
+    sheetX <- wb$validateSheet(replaceXMLEntities(sheet))
+    sheet <- replaceXMLEntities(sheet)
+  }
 
-  sheetX <- wb$validateSheet(sheet)
   if (wb$isChartSheet[[sheetX]]) {
     stop("Cannot write to chart sheet.")
     return(NULL)
   }
+
 
 
   ## Check not overwriting existing table headers
