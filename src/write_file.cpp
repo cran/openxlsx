@@ -2,11 +2,7 @@
 #include "openxlsx.h"
 
 
-
-
-
-
-
+//' @import Rcpp
 // [[Rcpp::export]]
 SEXP write_worksheet_xml(std::string prior
                            , std::string post
@@ -216,7 +212,7 @@ SEXP buildMatrixMixed(CharacterVector v,
     
     
     // If column is date class and no strings exist in column
-    if( (std::find(dateCols.begin(), dateCols.end(), i) != dateCols.end()) &
+    if( (std::find(dateCols.begin(), dateCols.end(), i) != dateCols.end()) &&
         (std::find(charCols.begin(), charCols.end(), i) == charCols.end()) ){
       
       // these are all dates and no characters --> safe to convert numerics
@@ -228,7 +224,12 @@ SEXP buildMatrixMixed(CharacterVector v,
         }else{
           // dt_str = as<std::string>(m(ri,i));
           dt_str = m(ri,i);
-          datetmp[ri] = Rcpp::Date(atoi(dt_str.substr(5,2).c_str()), atoi(dt_str.substr(8,2).c_str()), atoi(dt_str.substr(0,4).c_str()) );
+          try{
+            datetmp[ri] = Rcpp::Date(atoi(dt_str.substr(5,2).c_str()), atoi(dt_str.substr(8,2).c_str()), atoi(dt_str.substr(0,4).c_str()) );
+          }catch(...) {
+            Rcpp::Rcerr << "Error reading date:\n" << dt_str << "\nrow: " << ri+1 << "\ncol: " << i+1 << "\n";
+            throw;
+          }
           //datetmp[ri] = Date(atoi(m(ri,i)) - originAdj);
           //datetmp[ri] = Date(as<std::string>(m(ri,i)));
         }
@@ -342,7 +343,8 @@ CharacterVector build_table_xml(std::string table, std::string tableStyleXML, st
   table = table + tableCols + tableStyleXML + "</table>";
   
   
-  return wrap(table);
+  CharacterVector out = wrap(table);  
+  return markUTF8(out);
   
 }
 

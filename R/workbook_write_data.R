@@ -1,20 +1,37 @@
 
 #' @include class_definitions.R
-
-
-
-Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, colClasses, hlinkNames, keepNA, na.string, list_sep) {
+Workbook$methods(writeData = function(
+  df,
+  sheet,
+  startRow,
+  startCol,
+  colNames,
+  colClasses,
+  hlinkNames,
+  keepNA, 
+  na.string,
+  list_sep
+) {
   sheet <- validateSheet(sheet)
   nCols <- ncol(df)
   nRows <- nrow(df)
   df_nms <- names(df)
 
   allColClasses <- unlist(colClasses)
+  
+  isPOSIXlt <- function(data) sapply(lapply(data, class), FUN = function(x) any(x == "POSIXlt"))
+  to_convert <- isPOSIXlt(df)
+  
+  if (any(to_convert)) {
+    message("Found POSIXlt. Converting to POSIXct")
+    df[to_convert] <- lapply(df[to_convert], as.POSIXct)  
+  }
+  
+  
   df <- as.list(df)
 
   ######################################################################
   ## standardise all column types
-
 
   ## pull out NaN values
   nans <- unlist(lapply(1:nCols, function(i) {
@@ -36,9 +53,13 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
     if (grepl('date1904="1"|date1904="true"', stri_join(unlist(workbook), collapse = ""), ignore.case = TRUE)) {
       origin <- 24107L
     }
-
+    
     for (i in dInds) {
       df[[i]] <- as.integer(df[[i]]) + origin
+      if (origin == 25569L){
+        earlyDate <- which(df[[i]] < 60)
+        df[[i]][earlyDate] <- df[[i]][earlyDate] - 1
+      }
     }
 
     pInds <- which(sapply(colClasses, function(x) any(c("posixct", "posixt", "posixlt") %in% x)))
@@ -54,12 +75,11 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
       offSet <- lapply(t, parseOffset)
       offSet <- lapply(offSet, function(x) ifelse(is.na(x), 0, x))
 
-      for (i in 1:length(pInds)) {
+      for (i in seq_along(pInds)) {
         df[[pInds[i]]] <- as.numeric(as.POSIXct(df[[pInds[i]]])) / 86400 + origin + offSet[[i]]
       }
     }
   }
-
 
   ## convert any Dates to integers and create date style object
   if (any(c("currency", "accounting", "percentage", "3", "comma") %in% allColClasses)) {
@@ -84,10 +104,19 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
     }
   }
 
-  if ("formula" %in% allColClasses) {
-    for (i in which(sapply(colClasses, function(x) "formula" %in% x))) {
+  if (any(c("formula", "array_formula") %in% allColClasses)) {
+    
+    frm <- "formula"
+    cls <- "openxlsx_formula"
+    
+    if ("array_formula" %in% allColClasses) {
+      frm <- "array_formula"
+      cls <- "openxlsx_array_formula"
+    }
+    
+    for (i in which(sapply(colClasses, function(x) frm %in% x))) {
       df[[i]] <- replaceIllegalCharacters(as.character(df[[i]]))
-      class(df[[i]]) <- "openxlsx_formula"
+      class(df[[i]]) <- cls
     }
   }
 
@@ -114,10 +143,6 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
     }
   }
 
-
-
-
-
   ## End standardise all column types
   ######################################################################
 
@@ -133,8 +158,8 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
   v <- as.character(t(as.matrix(
     data.frame(df, stringsAsFactors = FALSE, check.names = FALSE, fix.empty.names = FALSE)
   )))
-
-
+  
+  
   if (keepNA) {
     if (is.null(na.string)) {
       t[is.na(v)] <- 4L
@@ -163,15 +188,21 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
   }
 
 
-
-  ## Forumlas
+  ## Formulas
   f_in <- rep.int(as.character(NA), length(t))
   any_functions <- FALSE
-  if ("openxlsx_formula" %in% colClasses) {
+  ref_cell <- paste0(int_2_cell_ref(startCol), startRow)
 
+  if (any(c("openxlsx_formula", "openxlsx_array_formula") %in% colClasses)) {
+    
     ## alter the elements of t where we have a formula to be "str"
-    formula_cols <- which(sapply(colClasses, function(x) "openxlsx_formula" %in% x, USE.NAMES = FALSE), useNames = FALSE)
-    formula_strs <- stri_join("<f>", unlist(df[formula_cols], use.names = FALSE), "</f>")
+    if ("openxlsx_formula" %in% colClasses) {
+      formula_cols <- which(sapply(colClasses, function(x) "openxlsx_formula" %in% x, USE.NAMES = FALSE), useNames = FALSE)
+      formula_strs <- stri_join("<f>", unlist(df[formula_cols], use.names = FALSE), "</f>")
+    } else { # openxlsx_array_formula
+      formula_cols <- which(sapply(colClasses, function(x) "openxlsx_array_formula" %in% x, USE.NAMES = FALSE), useNames = FALSE)
+      formula_strs <- stri_join("<f t=\"array\" ref=\"", ref_cell, ":", ref_cell, "\">", unlist(df[formula_cols], use.names = FALSE), "</f>")
+    }
     formula_inds <- unlist(lapply(formula_cols, function(i) i + (1:(nRows - colNames) - 1) * nCols + (colNames * nCols)), use.names = FALSE)
     f_in[formula_inds] <- formula_strs
     any_functions <- TRUE
@@ -208,7 +239,7 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
       } ## this is text to display instead of hyperlink
 
       ## create hyperlink objects
-      newhl <- lapply(1:length(hyperlink_inds), function(i) {
+      newhl <- lapply(seq_along(hyperlink_inds), function(i) {
         Hyperlink$new(ref = hyperlink_refs[i], target = targets[i], location = NULL, display = NULL, is_external = TRUE)
       })
 
@@ -217,16 +248,38 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
   }
 
 
-
-
-
-
-
   ## convert all strings to references in sharedStrings and update values (v)
   strFlag <- which(t == 1L)
   newStrs <- v[strFlag]
   if (length(newStrs) > 0) {
     newStrs <- replaceIllegalCharacters(newStrs)
+    vl <- stri_length(newStrs)
+    
+    for (i in which(vl > 32767)) {
+      
+      if(vl[i]>32768+30){
+        warning(
+          paste0(
+            stri_sub(newStrs[i], 32768, 32768 + 15),
+            " ... " ,
+            stri_sub(newStrs[i], vl[i] - 15, vl[i]),
+            " is truncated. 
+Number of characters exeed the limit of 32767."
+          )
+        )
+      } else {
+        warning(
+          paste0(
+            stri_sub(newStrs[i], 32768, -1),
+            " is truncated. 
+Number of characters exeed the limit of 32767."
+          )
+        )
+        
+      }
+      
+      # v[i] <- stri_sub(v[i], 1, 32767)
+    }
     newStrs <- stri_join("<si><t xml:space=\"preserve\">", newStrs, "</t></si>")
 
     uNewStr <- unique(newStrs)
@@ -244,8 +297,6 @@ Workbook$methods(writeData = function(df, sheet, startRow, startCol, colNames, c
     f_in = f_in,
     any_functions = any_functions
   )
-
-
 
   invisible(0)
 })

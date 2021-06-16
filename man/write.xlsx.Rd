@@ -4,16 +4,20 @@
 \alias{write.xlsx}
 \title{write data to an xlsx file}
 \usage{
-write.xlsx(x, file, asTable = FALSE, ...)
+write.xlsx(x, file, asTable = FALSE, overwrite = FALSE, ...)
 }
 \arguments{
-\item{x}{object or a list of objects that can be handled by \code{\link{writeData}} to write to file}
+\item{x}{A data.frame or a (named) list of objects that can be handled by
+\code{\link{writeData}} or \code{\link{writeDataTable}} to write to file}
 
-\item{file}{xlsx file name}
+\item{file}{A file path to save the xlsx file}
 
-\item{asTable}{write using writeDataTable as opposed to writeData}
+\item{asTable}{If \code{TRUE} will use \code{\link{writeDataTable}} rather
+than \code{\link{writeData}} to write \code{x} to the file (default: 
+\code{FALSE})}
 
-\item{...}{optional parameters to pass to functions:
+\item{overwrite}{If `TRUE` will save over `file` if present (default: `FALSE`)
+
 \itemize{
   \item{createWorkbook}
   \item{addWorksheet}
@@ -23,6 +27,9 @@ write.xlsx(x, file, asTable = FALSE, ...)
 }
 
 see details.}
+
+\item{...}{Additional arguments passed to \code{\link{writeData}}, 
+\code{\link{writeDataTable}}, \code{\link{setColWidths}}}
 }
 \value{
 A workbook object
@@ -75,7 +82,7 @@ between each column.  If "\code{all}" all cell borders are drawn.}
 
 \bold{colWidths Parameters}
 \itemize{
-  \item{\bold{colWidths}} {Must be value "auto". Sets all columns containing data to auto width.}
+  \item{\bold{colWidths}} {May be a single value for all columns (or "auto"), or a list of vectors that will be recycled for each sheet (see examples)}
 }
 
 
@@ -123,6 +130,13 @@ write.xlsx(l, "writeList2.xlsx",
 )
 }
 
+# specify column widths for multiple sheets
+\dontrun{
+write.xlsx(l, "writeList2.xlsx", colWidths = 20)
+write.xlsx(l, "writeList2.xlsx", colWidths = list(100, 200, 300))
+write.xlsx(l, "writeList2.xlsx", colWidths = list(rep(10, 5), rep(8, 11), rep(5, 5)))
+}
+
 }
 \seealso{
 \code{\link{addWorksheet}}
@@ -130,7 +144,9 @@ write.xlsx(l, "writeList2.xlsx",
 \code{\link{writeData}}
 
 \code{\link{createStyle}} for style parameters
+
+\code{\link{buildWorkbook}}
 }
 \author{
-Alexander Walker
+Alexander Walker, Jordan Mark Barbone
 }
