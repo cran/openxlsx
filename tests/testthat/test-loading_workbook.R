@@ -933,3 +933,112 @@ test_that("Load and saving a file with Threaded Comments works", {
   expect_silent(saveWorkbook(wb, file = temp_xlsx()))
   
 })
+
+test_that("Read and save file with inlineStr", {
+  ## loadThreadComment.xlsx is a simple xlsx file that uses Threaded Comment.
+  fl <- system.file("extdata", "inlineStr.xlsx", package = "openxlsx")
+  wb <- loadWorkbook(fl)
+  wb_df <- readWorkbook(wb)
+  
+  df <- data.frame(
+    this = c("is an xlsx file", "written with writexl::write_xlsx"),
+    it = c("cannot be read", "with open.xlsx::read.xlsx"),
+    stringsAsFactors = FALSE)
+  
+  # compare file imported with inlineStr
+  expect_true(all.equal(df, wb_df, compare.attributes = FALSE))
+  
+  df_read_xlsx <- read.xlsx(fl)
+  df_readWorkbook <- readWorkbook(fl)
+  
+  expect_true(all.equal(df, df_read_xlsx, compare.attributes = FALSE))
+  expect_true(all.equal(df, df_readWorkbook, compare.attributes = FALSE))
+  
+  tmp_xlsx <- temp_xlsx()
+  # Check that wb can be saved without error and reimported
+  expect_silent(saveWorkbook(wb, file = tmp_xlsx))
+  wb_df_re <- readWorkbook(loadWorkbook(tmp_xlsx))
+  expect_true(all.equal(wb_df, wb_df_re, compare.attributes = FALSE))
+  
+})
+
+# tests for getChildlessNode returns the content of every node, single node or not. the name has only historical meaning
+test_that("read nodes", {
+
+  # read single node
+  test <- "<xf numFmtId=\"0\" fontId=\"4\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\"/></xf>"
+  that <- openxlsx:::getChildlessNode(test, "xf")
+  expect_equal(test, that)
+
+  # real life example <foo/> and <foo>...</foo> mixed
+  cellXfs <- "<cellXfs count=\"8\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/><xf numFmtId=\"0\" fontId=\"1\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/><xf numFmtId=\"0\" fontId=\"3\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/><xf numFmtId=\"0\" fontId=\"5\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/><xf numFmtId=\"0\" fontId=\"6\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/><xf numFmtId=\"0\" fontId=\"2\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/><xf numFmtId=\"0\" fontId=\"7\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/><xf numFmtId=\"0\" fontId=\"4\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\"/></xf><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/></cellXfs>"
+  that <- openxlsx:::getChildlessNode(cellXfs, "xf")
+  test <- c("<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/>", 
+            "<xf numFmtId=\"0\" fontId=\"1\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/>", 
+            "<xf numFmtId=\"0\" fontId=\"3\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/>", 
+            "<xf numFmtId=\"0\" fontId=\"5\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/>", 
+            "<xf numFmtId=\"0\" fontId=\"6\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/>", 
+            "<xf numFmtId=\"0\" fontId=\"2\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/>", 
+            "<xf numFmtId=\"0\" fontId=\"7\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/>", 
+            "<xf numFmtId=\"0\" fontId=\"4\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\"/></xf>", 
+            "<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/>"
+  )
+  expect_equal(test, that)
+
+  # test <foos/>
+  test <- "<xfs bla/>"
+  that <- openxlsx:::getChildlessNode(test, "xf")
+  expect_equal(character(0), that)
+
+  # test <foo/>
+  test <- "<b/><b/>"
+  that <- openxlsx:::getChildlessNode(test, "b")
+  test <- c(
+    "<b/>",
+    "<b/>"
+  )
+  expect_equal(test, that)
+
+  # test <foo>...</foo>
+  test <- "<b>a</b><b/>"
+  that <- openxlsx:::getChildlessNode(test, "b")
+  test <- c("<b>a</b>", "<b/>")
+  expect_equal(test, that)
+
+  # test <foos><foo/></foos>
+  test <- "<xfs><xf/></xfs>"
+  that <- openxlsx:::getChildlessNode(test, "xf")
+  test <- "<xf/>"
+  expect_equal(test, that)
+  
+})
+
+test_that("sheet visibility", {
+
+  # example is rather slow (lots of hidden cols)
+  fl <- system.file("extdata", "ColorTabs3.xlsx", package = "openxlsx")
+  tmp_dir <- temp_xlsx()
+  
+  exp_sheets <- c("Nums", "Chars", "hidden")
+  exp_vis <- c("visible", "visible", "hidden")
+
+  # after load
+  wb <- loadWorkbook(fl)
+  wb_sheets <- openxlsx::sheets(wb)
+  wb_vis <- openxlsx::sheetVisibility(wb)
+  
+  # save
+  saveWorkbook(wb, tmp_dir)
+  
+  # re-import
+  wb2 <- loadWorkbook(tmp_dir)
+  wb2_sheets <- openxlsx::sheets(wb)
+  wb2_vis <- openxlsx::sheetVisibility(wb)
+  
+  expect_equal(exp_sheets, wb_sheets)
+  expect_equal(exp_vis, wb_vis)
+  
+  expect_equal(exp_sheets, wb2_sheets)
+  expect_equal(exp_vis, wb2_vis)
+  
+})

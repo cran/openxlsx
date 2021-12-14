@@ -4,13 +4,13 @@
 
 #' @name makeHyperlinkString
 #' @title create Excel hyperlink string
-#' @description Wrapper to create internal hyperlink string to pass to writeFormula()
+#' @description Wrapper to create internal hyperlink string to pass to writeFormula(). Either link to external urls or local files or straight to cells of local Excel sheets.
 #' @param sheet Name of a worksheet
 #' @param row integer row number for hyperlink to link to
 #' @param col column number of letter for hyperlink to link to
 #' @param text display text
 #' @param file Excel file name to point to. If NULL hyperlink is internal.
-#' @seealso \code{\link{writeFormula}}
+#' @seealso [writeFormula()]
 #' @export makeHyperlinkString
 #' @examples
 #'
@@ -74,27 +74,36 @@
 #'   startRow = 10, startCol = 1,
 #'   x = '=HYPERLINK(\\"[C:/Users]\\", \\"Link to an external file\\")'
 #' )
+#' 
+#' ## Link to internal file
+#' x = makeHyperlinkString(text = "test.png", file = "D:/somepath/somepicture.png")
+#' writeFormula(wb, "Sheet1", startRow = 11, startCol = 1, x = x)
+#'
 #' \dontrun{
 #' saveWorkbook(wb, "internalHyperlinks.xlsx", overwrite = TRUE)
 #' }
 #'
 makeHyperlinkString <- function(sheet, row = 1, col = 1, text = NULL, file = NULL) {
-  od <- getOption("OutDec")
-  options("OutDec" = ".")
-  on.exit(expr = options("OutDec" = od), add = TRUE)
+  op <- get_set_options()
+  on.exit(options(op), add = TRUE)
   
-  
-  cell <- paste0(int2col(col), row)
-  if (!is.null(file)) {
-    dest <- sprintf("[%s]'%s'!%s", file, sheet, cell)
+  if (missing(sheet)) {
+    if (!missing(row) || !missing(col)) warning("Option for col and/or row found, but no sheet was provided.")
+
+    str <- sprintf("=HYPERLINK(\"%s\", \"%s\")", file, text)
   } else {
-    dest <- sprintf("#'%s'!%s", sheet, cell)
-  }
-  
-  if (is.null(text)) {
-    str <- sprintf("=HYPERLINK(\"%s\")", dest)
-  } else {
-    str <- sprintf("=HYPERLINK(\"%s\", \"%s\")", dest, text)
+    cell <- paste0(int2col(col), row)
+    if (!is.null(file)) {
+      dest <- sprintf("[%s]'%s'!%s", file, sheet, cell)
+    } else {
+      dest <- sprintf("#'%s'!%s", sheet, cell)
+    }
+    
+    if (is.null(text)) {
+      str <- sprintf("=HYPERLINK(\"%s\")", dest)
+    } else {
+      str <- sprintf("=HYPERLINK(\"%s\", \"%s\")", dest, text)
+    }
   }
   
   return(str)
@@ -465,16 +474,17 @@ getAttrs <- function(xml, tag) {
 
 
 buildFontList <- function(fonts) {
-  sz <- getAttrs(fonts, "<sz ")
-  colour <- getAttrsFont(fonts, "<color ")
-  name <- getAttrs(fonts, tag = "<name ")
-  family <- getAttrs(fonts, "<family ")
-  scheme <- getAttrs(fonts, "<scheme ")
+  sz <- getAttrs(fonts, "sz")
+  colour <- getAttrsFont(fonts, "color")
+  name <- getAttrs(fonts, tag = "name")
+  family <- getAttrs(fonts, "family")
+  scheme <- getAttrs(fonts, "scheme")
   
   italic <- lapply(fonts, getChildlessNode, tag = "i")
   bold <- lapply(fonts, getChildlessNode, tag = "b")
-  underline <- lapply(fonts, getChildlessNode, tag = "u")
-  
+  underline <- lapply(fonts, getChildlessNode, tag = "u")  
+  strikeout <- lapply(fonts, getChildlessNode, tag = "strike")
+
   ## Build font objects
   ft <- replicate(list(), n = length(fonts))
   for (i in seq_along(fonts)) {
@@ -518,6 +528,11 @@ buildFontList <- function(fonts) {
     if (length(underline[[i]]) > 0) {
       f <- c(f, "underline")
       nms <- c(nms, "underline")
+    }
+
+    if (length(unlist(strikeout[i])) > 0) {
+      f <- c(f, strikeout[i])
+      nms <- c(nms, "strikeout")
     }
     
     f <- lapply(seq_along(f), function(i) unlist(f[i]))
@@ -813,8 +828,14 @@ buildFillList <- function(fills) {
   return(fillAttrs)
 }
 
-
+# Can test with below:
+# x <- "<definedName name=\"_xlnm._FilterDatabase\" localSheetId=\"0\" hidden=\"1\">'A & B < D > D'!$A$1:$A$10</definedName>"
 getDefinedNamesSheet <- function(x) {
+  sub("'?\\!.*", "", sub("^.*>'", "", x))
+}
+
+# Not used but kepted in case fix above isn't correct
+getDefinedNamedSheet_ <- function(x) {
   belongTo <- unlist(lapply(strsplit(x, split = ">|<"), "[[", 3))
   quoted <- grepl("^'", belongTo)
   
@@ -824,7 +845,6 @@ getDefinedNamesSheet <- function(x) {
   
   return(belongTo)
 }
-
 
 getSharedStringsFromFile <- function(sharedStringsFile, isFile) {
   

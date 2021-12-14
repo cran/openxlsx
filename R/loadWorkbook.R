@@ -11,7 +11,7 @@
 #' formatting of the original .xlsx file.
 #' @return Workbook object.
 #' @export
-#' @seealso \code{\link{removeWorksheet}}
+#' @seealso [removeWorksheet()]
 #' @examples
 #' ## load existing workbook from package folder
 #' wb <- loadWorkbook(file = system.file("extdata", "loadExample.xlsx", package = "openxlsx"))
@@ -42,7 +42,7 @@ loadWorkbook <- function(file, xlsxFile = NULL, isUnzipped = FALSE) {
     }
 
     ## create temp dir
-    xmlDir <- file.path(tempdir(), paste0(tempfile(tmpdir = ""), "_openxlsx_loadWorkbook"))
+    xmlDir <- tempfile()
 
     ## Unzip files to temp directory
     xmlFiles <- unzip(file, exdir = xmlDir)
@@ -174,7 +174,7 @@ loadWorkbook <- function(file, xlsxFile = NULL, isUnzipped = FALSE) {
 
 
     is_chart_sheet <- sheetrId %in% chartSheetRIds
-    is_visible <- !grepl("hidden", unlist(strsplit(sheets, split = "<sheet ")[-1]))
+    is_visible <- !grepl("hidden", sheets)
     if (length(is_visible) != length(sheetrId)) {
       is_visible <- rep(TRUE, length(sheetrId))
     }
@@ -223,6 +223,11 @@ loadWorkbook <- function(file, xlsxFile = NULL, isUnzipped = FALSE) {
       wb$workbook$calcPr <- calcPr
     }
 
+    ## additional workbook attributes
+    extLst <- getChildlessNode(xml = workbook, tag = "extLst")
+    if (length(extLst) > 0) {
+      wb$workbook$extLst <- extLst
+    }
 
     workbookPr <- getChildlessNode(xml = workbook, tag = "workbookPr")
     if (length(workbookPr) > 0) {

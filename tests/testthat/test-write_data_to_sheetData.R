@@ -246,3 +246,66 @@ Number of characters exeed the limit of 32767."
 Number of characters exeed the limit of 32767."
             )
           })
+
+# example from gh issue #200
+test_that("write hyperlinks", {
+  
+  tmp <- openxlsx:::temp_xlsx()
+  tmp_dir <- tempdir()
+  
+  
+  # create data
+  channels <- data.frame(
+    channel = c("ABC", "BBC", "CBC"),
+    homepage = c("https://www.abc.net.au/",
+                 "https://www.bbc.com/",
+                 "https://www.cbc.ca/"),
+    stringsAsFactors = FALSE
+  )
+  
+  channels$formula <- paste0('=HYPERLINK("',
+                             channels$homepage,
+                             '","',
+                             channels$channel,
+                             '")')
+  
+  
+  # create xlsx
+  wb <- createWorkbook()
+  addWorksheet(wb, "channels")
+  writeDataTable(wb, "channels", channels, tableName = "channels")
+  writeFormula(wb, "channels", channels$formula, startRow = 2, startCol = 1)
+  freezePane(wb, "channels", firstRow = TRUE)
+  setColWidths(wb, "channels", cols = seq_along(channels), widths = "auto")
+  saveWorkbook(wb, file = tmp, overwrite = TRUE)
+  
+  # check the xls file for the correct string
+  unzip(tmp, exdir = tmp_dir)
+  sheet1 <- readLines(paste0(tmp_dir, "/xl/worksheets/sheet1.xml"), warn = FALSE)
+  res <- sapply(replaceIllegalCharacters(channels$formula),
+                FUN = function(str)grepl(str, x = sheet1, fixed = TRUE))
+  
+  
+  expect_true(all(res))
+})
+
+
+test_that("write list containing NA",{
+  
+  data <- data.frame(i=1:3)
+  data$x <- list(1, c(2, 3), c(4, NA, 5))
+  
+  xlsx_file <- temp_xlsx()
+  wb <- createWorkbook()
+  addWorksheet(wb, "Sheet1")
+  writeData(wb, sheet = 1, data, sep = ";", na.string = "")
+  saveWorkbook(wb, file = xlsx_file, overwrite=TRUE)
+  
+  res <- read.xlsx(xlsx_file)
+  exp <- data.frame(i = 1:3,
+                    x = c("1", "2;3", "4;;5"),
+                    stringsAsFactors = FALSE)
+  
+  expect_equal(exp, res)
+  
+})

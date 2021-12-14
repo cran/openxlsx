@@ -37,18 +37,20 @@ do_call_params <- function(fun, params, ..., .map = FALSE) {
 }
 
 # sets temporary options
-# returns the current options to decrease line use
+# option() returns the original values
 get_set_options <- function() {
-  op <- options()
   options(
     # increase scipen to avoid writing in scientific
     scipen = 200,
     OutDec = ".",
     digits = 22
   )
-  op
 }
 
+
+#' helper function to create tempory directory for testing purpose
+#' @param name for the temp file
+#' @export
 temp_xlsx <- function(name = "temp_xlsx") {
   tempfile(pattern = paste0(name, "_"), fileext = ".xlsx")
 }
