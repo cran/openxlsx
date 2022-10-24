@@ -1,4 +1,4 @@
-0ee7dddc28597bfeb4535a0833d6d754 *DESCRIPTION
+4a1d7ea3577862119b9c34f071db6769 *DESCRIPTION
 7b6c9251a2fc7cf0233e205091619653 *LICENSE
 371afe0512d43633337c3f0bef8e0013 *NAMESPACE
 1d8355aeb0b737e446388ff632f5072d *NEWS.md
@@ -13,7 +13,7 @@ aefc02086b72488b3d1bf2508eea389e *R/CommentClass.R
 af007869aaefae8677d1435e03a9c641 *R/build_workbook.R
 a3d492922ef30c79b677ec904ed7a830 *R/chartsheet_class.R
 26e58b9c2e7ddd99d54a19149ef1a55e *R/class_definitions.R
-14bfa2b761920db98250c1657ae6a0ff *R/conditional_formatting.R
+e677adb6ac8f081451757d4ab8621689 *R/conditional_formatting.R
 c799fdbfef94a69869a5c3ae5a2a8f5f *R/data-fontSizeLookupTables.R
 2ffb24e255de01cbf9240f33a0f870d4 *R/helperFunctions.R
 02cbee7307fdd40737c3c09b7ea709b9 *R/loadWorkbook.R
@@ -30,7 +30,7 @@ b786e6732c9ce1cec2091c4b4a393027 *R/workbook_column_widths.R
 8ea06682e0d27e48e89b1bf47647f003 *R/workbook_read_workbook.R
 6913ec78106895729b439653888d21a4 *R/workbook_write_data.R
 6df271e92451301608e8de73ef464741 *R/worksheet_class.R
-f1f86635a597a1c02e49ff7254890b6b *R/wrappers.R
+6c9416968c3245514a8c1faae6dfba9d *R/wrappers.R
 f4984b0ac75b865db69940204d66c521 *R/writeData.R
 8df7c1096ecec9b3696e5cca8c48ce72 *R/writeDataTable.R
 8bb38cde620b0b5f4302287e5b99fe80 *R/writexlsx.R
@@ -155,11 +155,11 @@ a36c701ba39ae3d8114d7477074f3877 *man/writeData.Rd
 1515052e58b0af77686ed23acec527db *man/writeFormula.Rd
 458ccf3508f0ddf06fb3ccb5651823ce *src/RcppExports.cpp
 71289967be1025e3cff58b2edbe0fc77 *src/helper_functions.cpp
-08842fbf636f2398a534d98f615436de *src/load_workbook.cpp
+977b49bb815cac4fdb97113d38c79516 *src/load_workbook.cpp
 1385cba6d8f3abe5f80618b30fcd938b *src/openxlsx.h
-0873c1a2b23aab7079327c020b886ce3 *src/read_workbook.cpp
-c2ca7900d8ce0d25dfa73382dc8bd2af *src/write_data.cpp
-afb6d0ce468e4b16135d8bd4bee5e0d8 *src/write_file.cpp
+8bdebed417e93415ca5f24350939376d *src/read_workbook.cpp
+6ea3e08d79a9b906182b6cf9d1d1501b *src/write_data.cpp
+d8c69046ed22e46594ea2220efdcd87e *src/write_file.cpp
 484d69b3a6c975fdc692e9eb3015afe9 *src/write_file_2.cpp
 1491151710e8a3fec494f98ba7e0676f *tests/testthat.R
 0969e0aa603aa0583491c7f3bcb64088 *tests/testthat/test-CommentClass.R
