@@ -1,4 +1,4 @@
-4a1d7ea3577862119b9c34f071db6769 *DESCRIPTION
+301da49c1c3320aba27ea21f71816884 *DESCRIPTION
 7b6c9251a2fc7cf0233e205091619653 *LICENSE
 371afe0512d43633337c3f0bef8e0013 *NAMESPACE
 1d8355aeb0b737e446388ff632f5072d *NEWS.md
@@ -24,7 +24,7 @@ c6673c95be1ed5484336ef2375cdd13c *R/onUnload.R
 a4c54d6854a56526080440d6d5289124 *R/openxlsxCoerce.R
 dd4adab0b92471e60f255c53e92367fd *R/readWorkbook.R
 54f6490db5f29507421e1de8601d5c75 *R/sheet_data_class.R
-6f1990036b65c51003d24a4bc17198bc *R/sysdata.rda
+e57c88095b0ebc6432f00748ef3fb6fb *R/sysdata.rda
 d91747829fb03d4b8886a48ea69c7b15 *R/utils.R
 b786e6732c9ce1cec2091c4b4a393027 *R/workbook_column_widths.R
 8ea06682e0d27e48e89b1bf47647f003 *R/workbook_read_workbook.R
@@ -36,14 +36,14 @@ f4984b0ac75b865db69940204d66c521 *R/writeData.R
 8bb38cde620b0b5f4302287e5b99fe80 *R/writexlsx.R
 dd30c7b1d3710c3efb4e4afce40f6424 *R/zzz.R
 09da45628805144d06ceca71629882ae *README.md
-6f70825900d686c3ed9ee307e14fbad0 *build/vignette.rds
+a80b16765410a6d2a6abb3e5f7203b1d *build/vignette.rds
 884ec602987c2e44ef29642b947c9764 *inst/WORDLIST
-f3a680efd8bb22c5144da7750c43cc7e *inst/doc/Formatting.R
+e7841053567353ee7b1ba58318ee7f14 *inst/doc/Formatting.R
 1981b3039d3a126b8bbe2a592140dc54 *inst/doc/Formatting.Rmd
-e0095ab263e3377e5c381e223c8919d4 *inst/doc/Formatting.html
-b4122d79e4ac41b97086744612f5d482 *inst/doc/Introduction.R
+3e6f7159949b16497b426ea1a7252332 *inst/doc/Formatting.html
+e5016fc45a0086def4ede1584c494cc6 *inst/doc/Introduction.R
 70e145f1e10533307946e36d66a4c1a5 *inst/doc/Introduction.Rmd
-8ec970d6bfac532afbcdce6c527cf1f3 *inst/doc/Introduction.html
+9313f12280a34b7e321eeacf7e1567f7 *inst/doc/Introduction.html
 b882b13f509c96d058883be4eb6664a1 *inst/extdata/ColorTabs3.xlsx
 fcbfe30b58098920c92bb7c3dce6394d *inst/extdata/build_font_size_lookup.R
 13cccf9835335301211ac8d8a4785659 *inst/extdata/cloneEmptyWorksheetExample.xlsx
@@ -157,8 +157,8 @@ a36c701ba39ae3d8114d7477074f3877 *man/writeData.Rd
 71289967be1025e3cff58b2edbe0fc77 *src/helper_functions.cpp
 977b49bb815cac4fdb97113d38c79516 *src/load_workbook.cpp
 1385cba6d8f3abe5f80618b30fcd938b *src/openxlsx.h
-8bdebed417e93415ca5f24350939376d *src/read_workbook.cpp
-6ea3e08d79a9b906182b6cf9d1d1501b *src/write_data.cpp
+55c33be3a5c65f6a0a58a512d4c48973 *src/read_workbook.cpp
+961d7d481834a3ff48f9063443e5333f *src/write_data.cpp
 d8c69046ed22e46594ea2220efdcd87e *src/write_file.cpp
 484d69b3a6c975fdc692e9eb3015afe9 *src/write_file_2.cpp
 1491151710e8a3fec494f98ba7e0676f *tests/testthat.R
