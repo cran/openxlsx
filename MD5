@@ -1,4 +1,4 @@
-7b7fe705ce0c85e9493a74fa59b05477 *DESCRIPTION
+b905fd9b4478e3b7e8d58282ee7988cb *DESCRIPTION
 384383c3fbc506416be102453fc81f6d *LICENSE
 031429ed030b72120b043b004880ec33 *NAMESPACE
 32a20338aa97f4bd6fe07293f172eae9 *NEWS.md
@@ -42,10 +42,10 @@ b8a2611217089a3cc419d7e0e6fd2ee1 *data/openxlsxFontSizeLookupTableBold.rda
 4532ddbdb738699a6269c57f39a0f33e *inst/WORDLIST
 be0c487b219a2d957fc345fc753695e9 *inst/doc/Formatting.R
 8d3b21b8471f5dc92af07e841519139d *inst/doc/Formatting.Rmd
-dddd8637b6426b42a701621b04e1f4fc *inst/doc/Formatting.html
+17a496b910aeaac4076107103d7ec9be *inst/doc/Formatting.html
 cf0870d99ae2950d8a776792f3011453 *inst/doc/Introduction.R
 961206a8247297aa75df05d24767db9c *inst/doc/Introduction.Rmd
-ce08b88a03006b4cef0ffb83d0ec0c5d *inst/doc/Introduction.html
+b8e61a365237afb9a26e439fdd892fac *inst/doc/Introduction.html
 b882b13f509c96d058883be4eb6664a1 *inst/extdata/ColorTabs3.xlsx
 94cfdf8f6784785d4606805128a28659 *inst/extdata/build_font_size_lookup.R
 13cccf9835335301211ac8d8a4785659 *inst/extdata/cloneEmptyWorksheetExample.xlsx
@@ -211,7 +211,7 @@ f9360d4b16fe2d81181b6a96d520033c *tests/testthat/test-v3_0_0_bugs.R
 59ef59664451c2679e13b11ada83e10f *tests/testthat/test-worksheet_renaming.R
 6029206f09962aecf35ae8c55629fe2d *tests/testthat/test-wrappers.R
 f8137ae0f7cedb10e8bb81b6ad83aea3 *tests/testthat/test-write-permissions.R
-f63f7a9eb93149ee95775a6afd5f94b3 *tests/testthat/test-writeData.R
+85c78d352b7f286f11093257d23e3922 *tests/testthat/test-writeData.R
 c32903035cd015e26586d1384cfc2058 *tests/testthat/test-writeDataTable.R
 e58fafe2ba8307fd296b9ee61107297f *tests/testthat/test-write_data_to_sheetData.R
 fa9e13ce4b7350b26acd70f3f4372425 *tests/testthat/test-write_data_to_sheetData_NAs.R
