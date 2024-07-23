@@ -1,3 +1,10 @@
+# openxlsx 4.2.6
+
+* Fix external links ([#410](https://github.com/ycphs/openxlsx/pull/410))
+* Do not add unneccessary sheetPr node ([#409](https://github.com/ycphs/openxlsx/pull/409))
+* Add support for `namedRegion`s having dots and other special characters ([#338](https://github.com/ycphs/openxlsx/issues/338)).
+* Add type blanks and not blanks to conditional formatting ([#311](https://github.com/ycphs/openxlsx/pull/311))
+
 # openxlsx 4.2.5
 
 ## Fixes
@@ -10,6 +17,7 @@
 * fixed writing hyperlink formulas ([#200](https://github.com/ycphs/openxlsx/issues/200))
 * `write.xlsx()` now throws an error if it doesn't have write permissions ([#190](https://github.com/ycphs/openxlsx/issues/190))
 * `write.xlsx()` now again uses the default of `overwrite = TRUE` for saving files ([#249](https://github.com/ycphs/openxlsx/issues/249))
+* `as.character.formula()` exported to warn about potential conflicts with other packages ([#312](https://github.com/ycphs/openxlsx/issues/312), [#315](https://github.com/ycphs/openxlsx/pull/315))
 
 ## Improvements
 

@@ -1,16 +1,16 @@
-## ----include=TRUE,tidy=TRUE, eval = FALSE ,highlight=TRUE---------------------
+## ----include = TRUE, tidy = TRUE, eval = FALSE, highlight = TRUE--------------
 #  ## write to working directory
 #  library(openxlsx)
 #  write.xlsx(iris, file = "writeXLSX1.xlsx")
 #  write.xlsx(iris, file = "writeXLSXTable1.xlsx", asTable = TRUE)
 
-## ----include=TRUE,tidy=TRUE, eval = FALSE ,highlight=TRUE---------------------
+## ----include = TRUE, tidy = TRUE, eval = FALSE ,highlight = TRUE--------------
 #  ## write a list of data.frames to individual worksheets using list names as worksheet names
 #  l <- list("IRIS" = iris, "MTCARS" = mtcars)
 #  write.xlsx(l, file = "writeXLSX2.xlsx")
 #  write.xlsx(l, file = "writeXLSXTable2.xlsx", asTable = TRUE)
 
-## ----include=TRUE,tidy=TRUE, eval = FALSE ,highlight=TRUE---------------------
+## ----include = TRUE, tidy = TRUE, eval = FALSE ,highlight= TRUE---------------
 #  options("openxlsx.borderColour" = "#4F80BD")
 #  options("openxlsx.borderStyle" = "thin")
 #  options("openxlsx.dateFormat" = "mm/dd/yyyy")
@@ -35,7 +35,7 @@
 #  
 #  
 
-## ----include=TRUE,tidy=TRUE, eval = FALSE ,highlight=TRUE---------------------
+## ----include = TRUE, tidy = TRUE, eval = FALSE, highlight= TRUE---------------
 #  hs <- createStyle(fontColour = "#ffffff", fgFill = "#4F80BD",
 #                    halign = "center", valign = "center", textDecoration = "Bold",
 #                    border = "TopBottomLeftRight", textRotation = 45)
@@ -45,10 +45,8 @@
 #  
 #  write.xlsx(iris, "writeXLSXTable4.xlsx", asTable = TRUE,
 #  headerStyle = createStyle(textRotation = 45))
-#  
-#  
 
-## ----include=TRUE,tidy=TRUE, eval = FALSE ,highlight=TRUE---------------------
+## ----include = TRUE, tidy = TRUE, eval = FALSE, highlight = TRUE--------------
 #  l <- list("IRIS" = iris, "colClasses" = df)
 #  write.xlsx(l, file = "writeXLSX6.xlsx", borders = "columns", headerStyle = hs)
 #  write.xlsx(l, file = "writeXLSXTable5.xlsx", asTable = TRUE, tableStyle = "TableStyleLight2")
@@ -56,23 +54,23 @@
 #  openXL("writeXLSX6.xlsx")
 #  openXL("writeXLSXTable5.xlsx")
 
-## ----include=TRUE,tidy=TRUE, eval = FALSE ,highlight=TRUE---------------------
+## ----include = TRUE, tidy = TRUE, eval = FALSE, highlight = TRUE--------------
 #  wb <- write.xlsx(iris, "writeXLSX6.xlsx")
 #  setColWidths(wb, sheet = 1, cols = 1:5, widths = 20)
 #  saveWorkbook(wb, "writeXLSX6.xlsx", overwrite = TRUE)
 
-## ----include=TRUE,tidy=TRUE, eval = FALSE ,highlight=TRUE---------------------
+## ----include = TRUE, tidy = TRUE, eval = FALSE, highlight = TRUE--------------
 #  require(ggplot2)
 #  wb <- createWorkbook()
 #  options("openxlsx.borderColour" = "#4F80BD")
 #  options("openxlsx.borderStyle" = "thin")
 #  modifyBaseFont(wb, fontSize = 10, fontName = "Arial Narrow")
 
-## ----include=TRUE,tidy=TRUE, eval = FALSE ,highlight=TRUE---------------------
+## ----include = TRUE,tidy = TRUE, eval = FALSE, highlight = TRUE---------------
 #  addWorksheet(wb, sheetName = "Motor Trend Car Road Tests", gridLines = FALSE)
 #  addWorksheet(wb, sheetName = "Iris", gridLines = FALSE)
 
-## ----include=TRUE,tidy=TRUE, eval = FALSE ,highlight=TRUE---------------------
+## ----include = TRUE, tidy = TRUE, eval = FALSE, highlight = TRUE--------------
 #  freezePane(wb, sheet = 1, firstRow = TRUE, firstCol = TRUE) ## freeze first row and column
 #  writeDataTable(wb, sheet = 1, x = mtcars,
 #  colNames = TRUE, rowNames = TRUE,
@@ -80,7 +78,7 @@
 #  
 #  setColWidths(wb, sheet = 1, cols = "A", widths = 18)
 
-## ----include=TRUE,tidy=TRUE, eval = FALSE ,highlight=TRUE---------------------
+## ----include = TRUE, tidy = TRUE, eval = FALSE, highlight = TRUE--------------
 #  writeDataTable(wb, sheet = 2, iris, startCol = "K", startRow = 2)
 #  
 #  qplot(data=iris, x = Sepal.Length, y= Sepal.Width, colour = Species)
@@ -89,12 +87,12 @@
 #  means <- aggregate(x = iris[,-5], by = list(iris$Species), FUN = mean)
 #  vars <- aggregate(x = iris[,-5], by = list(iris$Species), FUN = var)
 
-## ----include=TRUE,tidy=TRUE, eval = FALSE ,highlight=TRUE---------------------
+## ----include = TRUE, tidy = TRUE, eval = FALSE, highlight = TRUE--------------
 #  headSty <- createStyle(fgFill="#DCE6F1", halign="center", border = "TopBottomLeftRight")
 #  writeData(wb, 2, x = "Iris dataset group means", startCol = 2, startRow = 2)
 #  writeData(wb, 2, x = means, startCol = "B", startRow=3, borders="rows", headerStyle = headSty)
 
-## ----include=TRUE,tidy=TRUE, eval = FALSE ,highlight=TRUE---------------------
+## ----include = TRUE, tidy = TRUE, eval = FALSE, highlight = TRUE--------------
 #  writeData(wb, 2, x = "Iris dataset group variances", startCol = 2, startRow = 9)
 #  writeData(wb, 2, x= vars, startCol = "B", startRow=10, borders="columns",
 #  headerStyle = headSty)
@@ -102,14 +100,14 @@
 #  setColWidths(wb, 2, cols=2:6, widths = 12) ## width is recycled for each col
 #  setColWidths(wb, 2, cols=11:15, widths = 15)
 
-## ----include=TRUE,tidy=TRUE, eval = FALSE ,highlight=TRUE---------------------
+## ----include = TRUE, tidy = TRUE, eval = FALSE, highlight = TRUE--------------
 #  s1 <- createStyle(fontSize=14, textDecoration=c("bold", "italic"))
 #  addStyle(wb, 2, style = s1, rows=c(2,9), cols=c(2,2))
 
-## ----include=TRUE,tidy=TRUE, eval = FALSE ,highlight=TRUE---------------------
+## ----include = TRUE, tidy = TRUE, eval = FALSE, highlight = TRUE--------------
 #  saveWorkbook(wb, "basics.xlsx", overwrite = TRUE) ## save to working directory
 
-## ----eval=FALSE, include=TRUE-------------------------------------------------
+## ----eval = FALSE, include = TRUE---------------------------------------------
 #  ## inspired by xtable gallery
 #  #https://CRAN.R-project.org/package=xtable/vignettes/xtableGallery.pdf
 #  
@@ -235,7 +233,7 @@
 #  openXL(wb)
 #  
 
-## ----eval=FALSE, include=TRUE,tidy=TRUE, eval = FALSE ,highlight=TRUE---------
+## ----eval = FALSE, include = TRUE, tidy = TRUE, highlight= TRUE---------------
 #  require(ggplot2)
 #  
 #  wb <- createWorkbook()
@@ -243,7 +241,7 @@
 #  ## read historical prices from yahoo finance
 #  ticker <- "CBA.AX"
 #  csv.url <- paste0("https://query1.finance.yahoo.com/v7/finance/download/",
-#  ticker, "?period1=1597597610&period2=1629133610&interval=1d&events=history&includeAdjustedClose=true")
+#  ticker, "?period1=1597597610&period2=1629133610&interval=1d&events=history&includeAdjustedClose= TRue")
 #  prices <- read.csv(url(csv.url), as.is = TRUE)
 #  prices$Date <- as.Date(prices$Date)
 #  close <- prices$Close
@@ -261,7 +259,7 @@
 #  insertPlot(wb, sheet = 1, xy = c("J", 3))
 #  
 #  ## Histogram of log returns
-#  ggplot(data = prices, aes(x = logReturns)) + geom_bar(binwidth=0.0025) +
+#  ggplot(data = prices, aes(x = logReturns)) + geom_histogram(binwidth=0.0025) +
 #  labs(title = "Histogram of log returns")
 #  
 #  ## currency
@@ -287,7 +285,7 @@
 #  saveWorkbook(wb, "stockPrice.xlsx", overwrite = TRUE)
 #  openXL("stockPrice.xlsx")
 
-## ----eval=FALSE, include=TRUE-------------------------------------------------
+## ----eval = FALSE, include = TRUE---------------------------------------------
 #  require(openxlsx)
 #  require(jpeg)
 #  require(ggplot2)
@@ -304,7 +302,7 @@
 #  wb <- createWorkbook("Einstein")
 #  addWorksheet(wb, "Original Image", gridLines = FALSE)
 #  
-#  A <- readJPEG(file.path(path.package("openxlsx"), "einstein.jpg"))
+#  A <- readJPEG(system.file("extdata", "einstein.jpg", package = "openxlsx"))
 #  height <- nrow(A); width <- ncol(A)
 #  
 #  ## write "Original Image" to cell B2
@@ -411,11 +409,15 @@
 #  
 #  ## remove example files for cran test
 #  if (identical(Sys.getenv("NOT_CRAN", unset = "true"), "false")) {
-#  file_list<-list.files(pattern="\\.xlsx",recursive = T)
-#  file_list<-fl[!grepl("inst/extdata",file_list)&!grepl("man/",file_list)]
+#    file_list<-list.files(pattern="\\.xlsx",recursive = T)
+#    file_list<-fl[!grepl("inst/extdata",file_list)&!grepl("man/",file_list)]
 #  
-#  if(length(file_list)>0){
-#  rm(file_list)
+#    if(length(file_list)>0){
+#      rm(file_list)
+#    }
 #  }
-#  
+
+## ----cleanup, eval = FALSE, include = FALSE-----------------------------------
+#  xlsx_files <- dir(pattern = "*.xlsx")
+#  unlink(xlsx_files)
 

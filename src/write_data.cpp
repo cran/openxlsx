@@ -195,7 +195,7 @@ List build_cell_merges(List comps){
     for(size_t j = 0; j < ck; j++){
       for(size_t k = 0; k < rk; k++){
         char name[30];
-        snprintf(name, 30, "%d-%d", r[k], v[j]);
+        snprintf(&(name[0]), sizeof(name), "%d-%d", r[k], v[j]);
         M(ind) = name;
         ind++;
       }
