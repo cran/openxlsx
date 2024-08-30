@@ -1,7 +1,7 @@
 ## ----setup, include = FALSE---------------------------------------------------
 library(openxlsx)
 
-## ----include = TRUE, tidy = TRUE, eval = FALSE, highlight = TRUE--------------
+## ----include = TRUE, eval = FALSE, highlight = TRUE---------------------------
 #  ## data.frame to write
 #  df <- data.frame("Date" = Sys.Date()-0:4,
 #                   "Logical" = c(TRUE, FALSE, TRUE, TRUE, FALSE),
@@ -53,7 +53,7 @@ library(openxlsx)
 #  
 #  openXL(wb) ## opens a temp version
 
-## ----include = TRUE, tidy = TRUE, eval = FALSE, highlight = TRUE--------------
+## ----include = TRUE, eval = FALSE, highlight = TRUE---------------------------
 #  # data.frame of dates
 #  dates <- data.frame("d1" = Sys.Date() - 0:4)
 #  for(i in 1:3) dates <- cbind(dates, dates)
@@ -107,7 +107,7 @@ library(openxlsx)
 #  
 #  saveWorkbook(wb, "Date Formatting.xlsx", overwrite = TRUE)
 
-## ----include = TRUE,tidy = TRUE, eval = FALSE, highlight = TRUE---------------
+## ----include = TRUE, eval = FALSE, highlight = TRUE---------------------------
 #  Sys.setenv(TZ = "Australia/Sydney")
 #  
 #  dateTimes <- data.frame("d1" = Sys.time() - 0:4*10000)
@@ -153,7 +153,7 @@ library(openxlsx)
 #  saveWorkbook(wb, "DateTime Formatting.xlsx", overwrite = TRUE)
 #  openXL("DateTime Formatting.xlsx")
 
-## ----include = TRUE, tidy = TRUE, eval = FALSE, highlight = TRUE--------------
+## ----include = TRUE, eval = FALSE, highlight = TRUE---------------------------
 #  wb <- createWorkbook()
 #  addWorksheet(wb, "cellIs")
 #  addWorksheet(wb, "Moving Row")
@@ -206,13 +206,13 @@ library(openxlsx)
 #  
 #  ## rule is a vector or colours of length 2 or 3 (any hex colour or any of colours())
 #  ## If rule is NULL, min and max of cells is used. Rule must be the same length as style or NULL.
-#  conditionalFormatting(wb, "colourScale", cols=1:ncol(df), rows=1:nrow(df),
+#  conditionalFormatting(wb, "colourScale", cols=seq_len(ncol(df)), rows=seq_len(nrow(df)),
 #     style = c("black", "white"),
 #     rule = c(0, 255),
 #     type = "colourScale")
 #  
-#  setColWidths(wb, "colourScale", cols = 1:ncol(df), widths = 1.07)
-#  setRowHeights(wb, "colourScale", rows = 1:nrow(df), heights = 7.5)
+#  setColWidths(wb, "colourScale", cols = seq_len(ncol(df)), widths = 1.07)
+#  setRowHeights(wb, "colourScale", rows = seq_len(nrow(df)), heights = 7.5)
 #  
 #  ## Databars
 #  writeData(wb, "databar", -5:5)
@@ -222,7 +222,7 @@ library(openxlsx)
 #  
 #  openXL(wb)
 
-## ----include = TRUE, tidy = TRUE, eval = FALSE, highlight = TRUE--------------
+## ----include = TRUE, eval = FALSE, highlight = TRUE---------------------------
 #  options("openxlsx.numFmt" = NULL)
 #  wb <- createWorkbook()
 #  addWorksheet(wb, "Sheet 1")
@@ -259,7 +259,8 @@ library(openxlsx)
 #  
 #  ## Using default numFmt to round to 2 dp (Any numeric column will be affected)
 #  addWorksheet(wb, "Sheet 2")
-#  df <- iris; df[, 1:4] <- df[1:4] + runif(1)
+#  df <- iris
+#  df[, 1:4] <- df[1:4] + runif(1)
 #  writeDataTable(wb, sheet = 2, x = df)
 #  writeData(wb, sheet = 2, x = df, startCol = 7)
 #  writeData(wb, sheet = 2, x = df, startCol = 13, borders = "rows")

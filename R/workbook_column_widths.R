@@ -101,8 +101,9 @@ Workbook$methods(setColWidths = function(sheet) {
           all_merged_cells <- do.call("rbind", all_merged_cells)
 
           ## only want the sheet data in here
-          refs <- paste(all_merged_cells[[1]], all_merged_cells[[2]], sep = ",")
-          existing_cells <- paste(worksheets[[sheet]]$sheet_data$rows, worksheets[[sheet]]$sheet_data$cols, sep = ",")
+          refs <- pair_rc(all_merged_cells[[1]], all_merged_cells[[2]])
+          existing_cells <- pair_rc(worksheets[[sheet]]$sheet_data$rows, 
+                                    worksheets[[sheet]]$sheet_data$cols)
           keep <- which(!existing_cells %in% refs & !is.na(worksheets[[sheet]]$sheet_data$v))
 
           sd <- Sheet_Data$new()
@@ -153,7 +154,10 @@ Workbook$methods(setColWidths = function(sheet) {
       }
     }
 
-    cols <- cols[!cols %in% names(worksheets[[sheet]]$cols)]
+    remaining_cols <- !cols %in% names(worksheets[[sheet]]$cols)
+    cols <- cols[remaining_cols]
+    widths <- widths[remaining_cols]
+    hidden <- hidden[remaining_cols]
   }
 
   # Add remaining columns

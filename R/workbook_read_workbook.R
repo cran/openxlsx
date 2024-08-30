@@ -41,7 +41,7 @@ read.xlsx.Workbook <- function(xlsxFile,
     stop("check.names must be TRUE/FALSE.")
   }
 
-  if (!is.character(sep.names) | nchar(sep.names) != 1) {
+  if (!is.character(sep.names) || nchar(sep.names) != 1) {
     stop("sep.names must be a character and only one.")
   }
 
@@ -256,7 +256,7 @@ read.xlsx.Workbook <- function(xlsxFile,
   vn <- as.numeric(v)
 
   ## Using -1 as a flag for no strings
-  if (length(sharedStrings) == 0 | string_refs[1] == -1L) {
+  if (length(sharedStrings) == 0 || string_refs[1] == -1L) {
     string_refs <- as.integer(NA)
   } else {
 
@@ -320,7 +320,7 @@ read.xlsx.Workbook <- function(xlsxFile,
     if (length(sO) > 0) {
       style_rows <- unlist(lapply(sO, "[[", "rows"))
       style_cols <- unlist(lapply(sO, "[[", "cols"))
-      isDate <- paste(rows, cols, sep = ",") %in% paste(style_rows, style_cols, sep = ",")
+      isDate <- pair_rc(rows, cols) %in% pair_rc(style_rows, style_cols)
 
       ## check numbers are also integers
       not_an_integer <- suppressWarnings(as.numeric(v[isDate]))
